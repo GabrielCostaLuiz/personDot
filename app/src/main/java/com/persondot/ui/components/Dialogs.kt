@@ -130,30 +130,6 @@ fun ReceivableDialog(
     }
 }
 
-@Composable
-fun PlannedDialog(
-    initial: Planned?, accounts: List<Account>, onSave: (Planned) -> Unit, onPay: (Planned, Long?) -> Unit,
-    onDelete: (() -> Unit)?, onDismiss: () -> Unit
-) {
-    var desc by remember { mutableStateOf(initial?.desc ?: "") }
-    var amount by remember { mutableStateOf(editMoney(initial?.amount ?: 0.0)) }
-    var month by remember { mutableStateOf(initial?.month ?: monthKey(LocalDate.now())) }
-    var note by remember { mutableStateOf(initial?.note ?: "") }
-    var acc by remember { mutableStateOf(accounts.firstOrNull()?.id?.toString() ?: "") }
-    FormDialog(if (initial == null) "Novo gasto planejado" else "Gasto planejado", onDismiss, {
-        onSave((initial ?: Planned(desc = "", amount = 0.0, month = month)).copy(desc = desc.trim(), amount = parseMoney(amount), month = month, note = note.trim())); onDismiss()
-    }, confirmEnabled = desc.isNotBlank(), onDelete = onDelete?.let { { it(); onDismiss() } }) {
-        Field("Descrição", desc, { desc = it })
-        MoneyField("Valor (R$)", amount) { amount = it }
-        MonthChoice("Mês", month, { month = it })
-        Field("Observação", note, { note = it })
-        if (initial != null && !initial.paid) {
-            AccountChoice("Pagar com o saldo de:", accounts, acc) { acc = it }
-            PrimaryButton("Marcar como pago", { onPay(initial.copy(desc = desc.trim(), amount = parseMoney(amount), month = month), acc.toLongOrNull()); onDismiss() }, Modifier.fillMaxWidth())
-        }
-    }
-}
-
 val EXPENSE_CATEGORIES = listOf("Mercado extra", "Alimentação fora", "Lazer", "Transporte", "Carro", "Beleza e saúde", "Compras", "Outros")
 
 @Composable
@@ -175,19 +151,68 @@ fun ExpenseDialog(initial: Expense?, accounts: List<Account>, onSave: (Expense, 
 }
 
 @Composable
-fun FixedDialog(initial: FixedCost?, defaultGroup: String, onSave: (FixedCost) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
+fun FixedDialog(initial: FixedCost?, defaultGroup: String, startMonth: String, onSave: (FixedCost) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var amount by remember { mutableStateOf(editMoney(initial?.amount ?: 0.0)) }
     var grp by remember { mutableStateOf(initial?.grp ?: defaultGroup) }
     var onCard by remember { mutableStateOf(initial?.onCard ?: false) }
-    FormDialog(if (initial == null) "Novo custo fixo" else "Editar custo", onDismiss, {
-        onSave((initial ?: FixedCost(name = "", amount = 0.0)).copy(name = name.trim(), amount = parseMoney(amount), grp = grp, onCard = onCard)); onDismiss()
+    var from by remember { mutableStateOf(initial?.startsAt ?: startMonth) }
+    FormDialog(if (initial == null) "Novo custo previsto" else "Editar custo previsto", onDismiss, {
+        onSave((initial ?: FixedCost(name = "", amount = 0.0)).copy(name = name.trim(), amount = parseMoney(amount), grp = grp, onCard = onCard, startsAt = from.ifBlank { null })); onDismiss()
     }, confirmEnabled = name.isNotBlank(), onDelete = onDelete?.let { { it(); onDismiss() } }) {
         Field("Nome", name, { name = it })
         MoneyField("Valor mensal (R$)", amount) { amount = it }
         Choice("Tipo", listOf(FixedCost.GRP_CASA to "Casa (essencial)", FixedCost.GRP_TRABALHO to "Trabalho", FixedCost.GRP_OPCIONAL to "Opcional"), grp) { grp = it }
         Choice("Cobrado no cartão?", listOf("n" to "Não", "s" to "Sim"), if (onCard) "s" else "n") { onCard = it == "s" }
+        MonthChoice("Vale a partir de", from, { from = it }, allowNone = true)
+        if (initial != null) Text("Mudar o valor aqui muda todos os meses ainda em aberto. Para mudar só um mês, toque no custo dentro do mês.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/**
+ * Um custo previsto dentro de um mês: confirmar o pagamento, ajustar o valor só daquele mês,
+ * tirar só daquele mês ou cancelar daqui pra frente.
+ */
+@Composable
+fun ForecastDialog(
+    f: Forecast, accounts: List<Account>,
+    onConfirm: (Double, Long?) -> Unit, onAdjust: (Double) -> Unit, onRemove: () -> Unit, onRestore: () -> Unit,
+    onUndo: () -> Unit, onCancelFrom: () -> Unit, onEditCost: () -> Unit, onDismiss: () -> Unit
+) {
+    var amount by remember { mutableStateOf(editMoney(f.amount)) }
+    var acc by remember { mutableStateOf(accounts.firstOrNull { it.kind != Account.KIND_IPCA }?.id?.toString() ?: "") }
+    val value = parseMoney(amount)
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = DarkSurface,
+        title = { Text("${f.cost.name} · ${mLabel(f.month)}", color = AppTextWhite, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (f.status) {
+                    ForecastStatus.PREVISTO -> {
+                        Text("Previsto. Quando pagar, confirme aqui. Se o valor mudou, ajuste antes.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                        MoneyField("Valor deste mês (R$)", amount) { amount = it }
+                        if (f.adjusted || value != f.cost.amount) Text("Valor padrão: ${brl(f.cost.amount)}", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                        Choice("Descontar de qual conta?", accounts.map { it.id.toString() to it.name } + ("" to "Nenhuma"), acc) { acc = it }
+                        PrimaryButton("Confirmar pagamento de ${brl(value)}", { onConfirm(value, acc.toLongOrNull()); onDismiss() }, Modifier.fillMaxWidth())
+                        if (value != f.amount && value > 0) SoftButton("Só ajustar o valor deste mês", { onAdjust(value); onDismiss() }, Modifier.fillMaxWidth())
+                        SoftButton("Tirar só deste mês", { onRemove(); onDismiss() }, Modifier.fillMaxWidth())
+                        SoftButton("Cancelar daqui pra frente", { onCancelFrom(); onDismiss() }, Modifier.fillMaxWidth(), danger = true)
+                        TextButton(onClick = { onEditCost(); onDismiss() }) { Text("Editar o valor padrão", color = CyberGreen) }
+                    }
+                    ForecastStatus.PAGO -> {
+                        Text("Pago: ${brl(f.amount)}.", color = CyberGreen, fontWeight = FontWeight.Bold)
+                        Text("Desfazer devolve o valor à conta de onde saiu.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                        SoftButton("Desfazer confirmação", { onUndo(); onDismiss() }, Modifier.fillMaxWidth())
+                    }
+                    ForecastStatus.REMOVIDO -> {
+                        Text("Removido só deste mês: não entra nas somas.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                        PrimaryButton("Trazer de volta", { onRestore(); onDismiss() }, Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Fechar", color = SecondaryText) } }
+    )
 }
 
 @Composable
@@ -277,16 +302,16 @@ fun SettingsDialog(s: Settings, onSave: (Settings) -> Unit, onDismiss: () -> Uni
 
 @Composable
 fun GoalDialog(initial: Goal?, onSave: (Goal) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf(initial?.name ?: "Carro à vista") }
+    var name by remember { mutableStateOf(initial?.name ?: "") }
     var target by remember { mutableStateOf(editMoney(initial?.targetValue ?: 0.0)) }
     var current by remember { mutableStateOf(editMoney(initial?.currentValue ?: 0.0)) }
-    var cat by remember { mutableStateOf(initial?.category ?: "CARRO") }
+    var cat by remember { mutableStateOf(initial?.category ?: "OUTRA") }
     FormDialog(if (initial == null) "Nova meta" else "Editar meta", onDismiss, {
         onSave((initial ?: Goal(name = "", targetValue = 0.0, currentValue = 0.0, category = cat)).copy(name = name.trim(), targetValue = parseMoney(target), currentValue = parseMoney(current), category = cat)); onDismiss()
     }, confirmEnabled = name.isNotBlank() && parseMoney(target) > 0, onDelete = onDelete?.let { { it(); onDismiss() } }) {
-        Field("Nome", name, { name = it })
+        Field("Nome (ex.: Viagem, Curso)", name, { name = it })
         MoneyField("Valor da meta (R$)", target) { target = it }
         MoneyField("Já separado (R$)", current) { current = it }
-        Choice("Tipo", listOf("CARRO" to "Carro", "VIAGEM" to "Viagem", "OUTRA" to "Outra"), cat) { cat = it }
+        Choice("Tipo", listOf("VIAGEM" to "Viagem", "ESTUDO" to "Estudo", "OUTRA" to "Outra"), cat) { cat = it }
     }
 }

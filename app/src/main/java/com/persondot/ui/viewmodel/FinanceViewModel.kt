@@ -8,6 +8,7 @@ import com.persondot.data.local.AppDatabase
 import com.persondot.data.model.*
 import com.persondot.data.repository.FinanceRepository
 import com.persondot.domain.FinanceData
+import com.persondot.domain.Forecast
 import com.persondot.domain.addMonths
 import com.persondot.domain.monthKey
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,19 +52,42 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun saveInstallment(i: DebtInstallment) = run { repo.save(i) }
     fun deleteInstallment(i: DebtInstallment) = run { repo.delete(i) }
     fun addInstallment(debtId: Long, month: String?, amount: Double) = run { repo.save(DebtInstallment(debtId = debtId, month = month, amount = amount)) }
-    /** Paga a próxima parcela em aberto da dívida e desconta da conta escolhida. */
+    /** Confirma o pagamento de uma parcela e desconta da conta escolhida. */
+    fun payInstallment(i: DebtInstallment, accountId: Long?) = run { repo.save(i.copy(paid = true)); adjust(accountId, -i.amount) }
+    /** Paga a próxima parcela em aberto da dívida. */
     fun payNext(debtId: Long, accountId: Long?) = run {
         val d = data.value.debts.firstOrNull { it.debt.id == debtId } ?: return@run
         val next = d.installments.filter { !it.paid }.minByOrNull { it.month ?: "9999" } ?: return@run
         repo.save(next.copy(paid = true)); adjust(accountId, -next.amount)
     }
 
-    // ---- custos fixos, planejados, gastos, aportes ----
+    // ---- custos previstos ----
     fun saveFixed(f: FixedCost) = run { repo.save(f) }
     fun deleteFixed(f: FixedCost) = run { repo.delete(f) }
-    fun savePlanned(p: Planned) = run { repo.save(p) }
-    fun deletePlanned(p: Planned) = run { repo.delete(p) }
-    fun payPlanned(p: Planned, accountId: Long?) = run { repo.save(p.copy(paid = true)); adjust(accountId, -p.amount) }
+
+    /** Confirma o pagamento do custo naquele mês (valor pode ter mudado) e desconta da conta. */
+    fun confirmForecast(f: Forecast, amount: Double, accountId: Long?) = run {
+        repo.setEntry(f.cost.id, f.month, MonthEntry.PAGO, amount, accountId); adjust(accountId, -amount)
+    }
+    /** Desfaz a confirmação, devolvendo o valor à conta de onde saiu. */
+    fun undoForecast(f: Forecast) = run {
+        val e = f.entry ?: return@run
+        if (e.status == MonthEntry.PAGO) adjust(e.accountId, e.amount ?: f.cost.amount)
+        val amt = e.amount
+        if (amt != null && amt != f.cost.amount) repo.setEntry(f.cost.id, f.month, MonthEntry.PREVISTO, amt, null) else repo.clearEntry(f.cost.id, f.month)
+    }
+    /** Ajusta o valor só daquele mês (continua previsto). */
+    fun adjustForecast(f: Forecast, amount: Double) = run {
+        if (amount == f.cost.amount) repo.clearEntry(f.cost.id, f.month) else repo.setEntry(f.cost.id, f.month, MonthEntry.PREVISTO, amount, null)
+    }
+    /** Tira o custo só daquele mês. */
+    fun removeForecast(f: Forecast) = run { repo.setEntry(f.cost.id, f.month, MonthEntry.REMOVIDO, null, null) }
+    /** Traz de volta um custo removido (ou limpa o ajuste). */
+    fun restoreForecast(f: Forecast) = run { repo.clearEntry(f.cost.id, f.month) }
+    /** Cancela o custo daquele mês em diante (ex.: cancelou a assinatura). Meses anteriores ficam como estavam. */
+    fun cancelFrom(f: Forecast) = run { repo.save(f.cost.copy(endsBefore = f.month)) }
+
+    // ---- gastos variáveis e aportes ----
     fun saveExpense(e: Expense, debitAccountId: Long? = null) = run {
         val isNew = e.id == 0L
         repo.save(e); if (isNew) adjust(debitAccountId, -e.amount)
@@ -80,12 +104,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun deleteReflection(r: Reflection) = run { repo.delete(r) }
     /** Venceu o impulso: cancela a compra. */
     fun cancelReflection(r: Reflection) = run { repo.save(r.copy(isApproved = false, isCancelled = true, purchaseAwaitedTime = 24L)) }
-    /** Decidiu comprar: entra como gasto planejado (à vista) ou como dívida em 6x (no cartão). */
+    /** Decidiu comprar: à vista vira gasto lançado (e sai da primeira conta); no cartão vira dívida em 6x. */
     fun approveReflection(r: Reflection) = run {
         repo.save(r.copy(isApproved = true, isCancelled = false, purchaseAwaitedTime = 24L))
         val now = monthKey(LocalDate.now())
         if (r.wouldBuyCash) {
-            repo.save(Planned(desc = r.name, amount = r.estimatedPrice, month = now, note = "da zona de reflexão"))
+            repo.save(Expense(desc = r.name, amount = r.estimatedPrice, cat = "Compras", date = LocalDate.now().toString()))
+            adjust(data.value.accounts.firstOrNull { it.kind != Account.KIND_IPCA }?.id, -r.estimatedPrice)
         } else {
             repo.createDebt("${r.name} (refletido)", "6x no cartão", r.estimatedPrice / 6.0, 6, addMonths(now, 1), ::addMonths)
         }

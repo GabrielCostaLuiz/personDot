@@ -10,13 +10,16 @@ O visual vem do [mindful-finance](https://github.com/GabrielCostaLuiz/mindful-fi
 
 | Aba | Para quê |
 |---|---|
-| **Painel** | "Livre de verdade" (o que é seu depois das parcelas e planejados), nota de saúde financeira com próximo passo, reserva de emergência, contas, entradas a receber e gastos planejados |
-| **Gastos** | Tudo que sai por mês: casa (essencial), trabalho, opcionais, parcelas, planejados e gastos variáveis por categoria. Interruptor para simular o corte de opcionais |
-| **Decidir** | **Vale a pena?** simula uma compra à vista ou parcelada (impacto no livre, nos meses seguintes e na meta) e **Reflexão 24h** com resfriamento anti-impulso |
-| **Futuro** | Dívidas e parcelas (pagar a próxima, editar, adicionar), calendário de alívio e fluxo mês a mês com aporte editável |
-| **Metas** | **Contas riscadas** (regra dos 200: valor da conta × 200), metas gerais e **carro à vista** com custo real de propriedade (TCO) |
-| **Ajustes** | Parâmetros do plano, backup (exportar/importar), atualização do app e tema |
-| **Meu Dot** (ícone no topo) | O avatar do PersonDot: 9 Dots para escolher (Original, Nuvem, Gota, Flor, Coração, Bolha, Almofada, Pedrinha, Noite), com nome editável. Os olhos piscam e a expressão muda com a sua saúde financeira. Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt` |
+| **Painel** | Visão geral: o Dot com o seu **norte** (o que fazer agora), "livre de verdade", anéis de saúde, reserva e contas riscadas, o que falta confirmar no mês, contas e entradas a receber |
+| **Gastos** | **Mês**: todo custo é uma **previsão** até você **confirmar** o pagamento (dá para ajustar o valor do mês, tirar só daquele mês ou cancelar daqui pra frente); simulação de corte de opcionais mostrando o que sairia; gastos do dia a dia. **Parcelas**: dívidas e faturas. **Fluxo**: calendário de alívio e mês a mês |
+| **Dot** | Chat com o Dot: você pergunta em português e ele chama as ferramentas do app (saúde, simulador de compra, resumo do mês, corte, parcelas, reserva, "e se...?"). Ações que mudam dados pedem um "sim" antes |
+| **Decidir** | **Vale a pena?** simula uma compra à vista ou parcelada e **Reflexão 24h** com resfriamento anti-impulso |
+| **Futuro** | Evoluir: linha do tempo das conquistas, **"E se...?"** (guardar mais, cortar opcionais, aumento de renda), contas riscadas (regra dos 200) e metas |
+| **Ajustes** | Parâmetros do plano, backup (exportar/importar), atualização do app, tema e dicas do Dot |
+| **Meu Dot** (pelo chat) | 9 Dots para escolher (Original, Nuvem, Gota, Flor, Coração, Bolha, Almofada, Pedrinha, Noite), com nome editável. Os olhos piscam, ele pula nas ações e a expressão muda com a sua saúde financeira. Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt` |
+
+O Dot aparece em todas as telas numa faixa fina com dicas e reações (dá para desligar em Ajustes). O chat **não usa IA nem internet**:
+ele entende frases por padrões e usa as mesmas funções do app, então tudo roda no seu aparelho.
 
 Tudo é editável. Os dados ficam **só no aparelho** (Room/SQLite). Nada vai para servidor.
 

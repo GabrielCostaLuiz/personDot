@@ -2,10 +2,10 @@ package com.persondot.ui.dot
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 /** Formas dos Dots. Todas são desenhadas por código, sem imagens. */
 enum class DotShape { GHOST, CLOUD, FLOWER, DROP, HEART, SPHERE, PILLOW, BLOB }
 
-/** Humor do Dot (muda os olhos). Ligado à nota de saúde financeira. */
+/** Humor do Dot (muda os olhos). Ligado à nota de saúde financeira e às ações do app. */
 enum class Mood { HAPPY, NEUTRAL, WORRIED, SLEEPY }
 
 data class DotDesign(val id: String, val name: String, val shape: DotShape, val color: Color, val eye: Color = Color.White)
@@ -120,72 +120,97 @@ private fun faceY(shape: DotShape) = when (shape) {
 
 /**
  * O Dot: corpo com volume, olhos em pílula que piscam e olham em volta, e um leve flutuar.
- * [animate] = false desenha parado (para a grade de escolha).
+ *
+ * - [animate] = false desenha parado (para grades e ícones pequenos).
+ * - [bounceKey]: cada vez que muda, o Dot dá um pulinho (reação a algo que você fez).
+ * - [thinking]: olha de lado e "pulsa", como quem está pensando.
+ * - [onClick]: ao tocar ele balança (e chama o callback).
  */
 @Composable
-fun DotAvatar(design: DotDesign, modifier: Modifier = Modifier, size: Dp = 160.dp, mood: Mood = Mood.NEUTRAL, animate: Boolean = true) {
+fun DotAvatar(
+    design: DotDesign, modifier: Modifier = Modifier, size: Dp = 160.dp, mood: Mood = Mood.NEUTRAL,
+    animate: Boolean = true, bounceKey: Int = 0, thinking: Boolean = false, onClick: (() -> Unit)? = null
+) {
     val transition = rememberInfiniteTransition(label = "dot")
-    val float by transition.animateFloat(
-        0f, 1f, infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "float"
-    )
+    val float by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "float")
     val blink by transition.animateFloat(
-        1f, 1f,
-        infiniteRepeatable(keyframes {
-            durationMillis = 4600
-            1f at 0; 1f at 4300; 0.08f at 4400; 1f at 4560
-        }), label = "blink"
+        1f, 1f, infiniteRepeatable(keyframes { durationMillis = 4600; 1f at 0; 1f at 4300; 0.08f at 4400; 1f at 4560 }), label = "blink"
     )
-    val look by transition.animateFloat(
-        -1f, 1f, infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Reverse), label = "look"
-    )
+    val look by transition.animateFloat(-1f, 1f, infiniteRepeatable(tween(if (thinking) 900 else 5200, easing = LinearEasing), RepeatMode.Reverse), label = "look")
+    val pulse by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "pulse")
+
+    val jump = remember { Animatable(0f) }
+    LaunchedEffect(bounceKey) {
+        if (bounceKey > 0 && animate) {
+            jump.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
+            jump.animateTo(0f, spring(dampingRatio = 0.38f, stiffness = 260f))
+        }
+    }
+    val wiggle = remember { Animatable(0f) }
+    var wiggleKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(wiggleKey) {
+        if (wiggleKey > 0) {
+            wiggle.animateTo(1f, tween(90)); wiggle.animateTo(-1f, tween(140)); wiggle.animateTo(0.6f, tween(120))
+            wiggle.animateTo(0f, spring(dampingRatio = 0.35f, stiffness = 300f))
+        }
+    }
+
     val f = if (animate) float else 0.5f
     val b = if (animate) blink else 1f
     val l = if (animate) look else 0f
+    val p = if (animate && thinking) pulse else 0f
+    val clickMod = if (onClick != null) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { wiggleKey++; onClick() } else Modifier
 
-    Canvas(modifier.size(size)) { drawDot(design, mood, f, b, l) }
+    Canvas(modifier.size(size).then(clickMod)) { drawDot(design, mood, f, b, l, jump.value, wiggle.value * 7f, p) }
 }
 
-private fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink: Float, look: Float) {
+private fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink: Float, look: Float, jump: Float, tilt: Float, pulse: Float) {
     val s = this.size.minDimension
     val body = s * 0.78f
     val left = (s - body) / 2
-    val top = s * 0.08f + (1f - float) * s * 0.035f
+    val top = s * 0.08f + (1f - float) * s * 0.035f - jump * s * 0.10f
 
     // sombra no chão (diminui quando o Dot sobe)
-    val shadowW = body * (0.62f + 0.10f * float)
-    drawOval(Color.Black.copy(alpha = 0.22f - 0.06f * (1f - float)), Offset((s - shadowW) / 2, s * 0.90f), Size(shadowW, s * 0.055f))
+    val lift = float * 0.5f + jump
+    val shadowW = body * (0.62f + 0.10f * float - 0.14f * jump)
+    drawOval(Color.Black.copy(alpha = (0.22f - 0.06f * lift).coerceAtLeast(0.05f)), Offset((s - shadowW) / 2, s * 0.90f), Size(shadowW, s * 0.055f))
 
     val path = bodyPath(design.shape, body, body)
-    val sx = left; val sy = top
-    translate(sx, sy) {
-        drawPath(path, design.color)
-        // volume: luz no canto superior esquerdo e sombra no inferior direito
-        drawPath(path, Brush.radialGradient(
-            colors = listOf(Color.White.copy(alpha = 0.32f), Color.Transparent, Color.Black.copy(alpha = 0.26f)),
-            center = Offset(body * 0.30f, body * 0.22f), radius = body * 1.05f))
-        // brilho
-        rotate(-28f, Offset(body * 0.28f, body * 0.2f)) {
-            drawOval(Color.White.copy(alpha = 0.22f), Offset(body * 0.17f, body * 0.13f), Size(body * 0.20f, body * 0.09f))
-        }
+    val squash = 1f - jump * 0.06f + pulse * 0.025f
+    rotate(tilt, Offset(s / 2, s * 0.8f)) {
+        translate(left, top) {
+            scale(1f / squash * (1f + jump * 0.03f), squash, Offset(body / 2, body)) {
+                drawPath(path, design.color)
+                // volume: luz no canto superior esquerdo e sombra no inferior direito
+                drawPath(path, Brush.radialGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.32f), Color.Transparent, Color.Black.copy(alpha = 0.26f)),
+                    center = Offset(body * 0.30f, body * 0.22f), radius = body * 1.05f))
+                // brilho
+                rotate(-28f, Offset(body * 0.28f, body * 0.2f)) {
+                    drawOval(Color.White.copy(alpha = 0.22f), Offset(body * 0.17f, body * 0.13f), Size(body * 0.20f, body * 0.09f))
+                }
 
-        // olhos
-        val cy = body * faceY(design.shape)
-        val gap = body * 0.15f
-        val cx = body / 2 + look * body * 0.025f
-        val eyeW = body * 0.085f
-        val eyeH = body * 0.20f
-        val (tilt, hScale) = when (mood) {
-            Mood.HAPPY -> 10f to 1.10f
-            Mood.NEUTRAL -> 8f to 1.0f
-            Mood.WORRIED -> -12f to 1.0f
-            Mood.SLEEPY -> 0f to 0.42f
-        }
-        val v = hScale * blink
-        for (dx in listOf(-gap, gap)) {
-            val c = Offset(cx + dx, cy)
-            rotate(if (dx < 0) -tilt else tilt, c) {
-                scale(1f, v, c) {
-                    drawRoundRect(design.eye, Offset(c.x - eyeW / 2, c.y - eyeH / 2), Size(eyeW, eyeH), CornerRadius(eyeW / 2))
+                // olhos
+                val cy = body * faceY(design.shape)
+                val gap = body * 0.15f
+                val cx = body / 2 + look * body * (if (pulse > 0f) 0.05f else 0.025f)
+                val eyeW = body * 0.085f
+                val eyeH = body * 0.20f
+                // inclinação simétrica: positivo = topos para fora; negativo = para dentro (preocupado)
+                val (eyeTilt, hScale) = when (mood) {
+                    Mood.HAPPY -> 10f to 1.10f
+                    Mood.NEUTRAL -> 8f to 1.0f
+                    Mood.WORRIED -> -12f to 1.0f
+                    Mood.SLEEPY -> 0f to 0.42f
+                }
+                val v = hScale * blink
+                for (dx in listOf(-gap, gap)) {
+                    val c = Offset(cx + dx, cy)
+                    rotate(if (dx < 0) -eyeTilt else eyeTilt, c) {
+                        scale(1f, v, c) {
+                            drawRoundRect(design.eye, Offset(c.x - eyeW / 2, c.y - eyeH / 2), Size(eyeW, eyeH), CornerRadius(eyeW / 2))
+                        }
+                    }
                 }
             }
         }

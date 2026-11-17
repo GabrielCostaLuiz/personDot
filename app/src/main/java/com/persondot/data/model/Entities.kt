@@ -1,6 +1,7 @@
 package com.persondot.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** Parâmetros do plano (uma única linha, id = 1). */
@@ -57,14 +58,19 @@ data class DebtInstallment(
     val includesSubs: Boolean = false   // a fatura deste mês já inclui as assinaturas do cartão
 )
 
-/** Custo fixo mensal. grp: CASA (essencial), TRABALHO ou OPCIONAL. */
+/**
+ * Custo mensal PREVISTO. Todo mês ele aparece como previsão até você confirmar o pagamento.
+ * grp: CASA (essencial), TRABALHO ou OPCIONAL. Vale de [startsAt] (inclusive) até [endsBefore] (exclusive); null = sem limite.
+ */
 @Entity(tableName = "fixed_costs")
 data class FixedCost(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val amount: Double,
     val grp: String = GRP_CASA,
-    val onCard: Boolean = false
+    val onCard: Boolean = false,
+    val startsAt: String? = null,
+    val endsBefore: String? = null
 ) {
     companion object {
         const val GRP_CASA = "CASA"
@@ -73,18 +79,28 @@ data class FixedCost(
     }
 }
 
-/** Gasto único já previsto (ex.: procedimento, presente). */
-@Entity(tableName = "planned")
-data class Planned(
+/**
+ * Ajuste de UM mês de um custo previsto. Sem registro = previsto pelo valor padrão.
+ * status: PREVISTO (só ajustou o valor), PAGO (confirmado) ou REMOVIDO (não existe neste mês).
+ * [accountId] guarda de qual conta o pagamento saiu, para poder desfazer.
+ */
+@Entity(tableName = "month_entries", indices = [Index(value = ["fixedId", "month"], unique = true)])
+data class MonthEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val desc: String,
-    val amount: Double,
+    val fixedId: Long,
     val month: String,
-    val note: String = "",
-    val paid: Boolean = false
-)
+    val status: String,
+    val amount: Double? = null,
+    val accountId: Long? = null
+) {
+    companion object {
+        const val PREVISTO = "PREVISTO"
+        const val PAGO = "PAGO"
+        const val REMOVIDO = "REMOVIDO"
+    }
+}
 
-/** Gasto variável lançado no dia a dia. date = "AAAA-MM-DD". */
+/** Gasto variável lançado no dia a dia (já aconteceu). date = "AAAA-MM-DD". */
 @Entity(tableName = "expenses")
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -109,7 +125,7 @@ data class Reflection(
     val estimatedPrice: Double,
     val category: String,
     val isNecessity: Boolean,
-    val helpsCarGoal: Boolean,
+    val helpsCarGoal: Boolean,           // "me aproxima das minhas metas?" (nome antigo mantido no banco)
     val willUseMoreThanOneYear: Boolean,
     val wouldBuyCash: Boolean,
     val emotionSource: String,
@@ -121,7 +137,7 @@ data class Reflection(
     val purchaseAwaitedTime: Long = 0L
 )
 
-/** Meta com valor-alvo (ex.: carro à vista). category: CARRO, VIAGEM, OUTRA. */
+/** Meta com valor-alvo. category: VIAGEM, ESTUDO ou OUTRA. */
 @Entity(tableName = "goals")
 data class Goal(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,

@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
             val dark = remember { mutableStateOf(prefs.getBoolean("dark", true)) }
             val dotId = remember { mutableStateOf(prefs.getString("dot_id", "original") ?: "original") }
             val dotName = remember { mutableStateOf(prefs.getString("dot_name", "Dot") ?: "Dot") }
+            val tips = remember { mutableStateOf(prefs.getBoolean("dot_tips", true)) }
             PersonDotTheme(darkTheme = dark.value) {
                 val vm: FinanceViewModel = viewModel()
                 MainScreen(
@@ -28,7 +29,9 @@ class MainActivity : ComponentActivity() {
                     onToggleTheme = { dark.value = !dark.value; prefs.edit().putBoolean("dark", dark.value).apply() },
                     dotId = dotId.value, dotName = dotName.value,
                     onDotChange = { dotId.value = it; prefs.edit().putString("dot_id", it).apply() },
-                    onDotNameChange = { dotName.value = it; prefs.edit().putString("dot_name", it).apply() }
+                    onDotNameChange = { dotName.value = it; prefs.edit().putString("dot_name", it).apply() },
+                    tipsEnabled = tips.value,
+                    onTipsChange = { tips.value = it; prefs.edit().putBoolean("dot_tips", it).apply() }
                 )
             }
         }

@@ -54,6 +54,7 @@ private fun PurchaseSimulator(data: FinanceData) {
     var desejo by rememberSaveable { mutableStateOf(true) }
     var result by remember { mutableStateOf<PurchaseResult?>(null) }
     val c = remember(data) { data.core() }
+    val dot = com.persondot.ui.dot.LocalDot.current
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
         item {
@@ -69,8 +70,10 @@ private fun PurchaseSimulator(data: FinanceData) {
                     MoneyField("Custo mensal que vem junto (opcional, ex.: carro)", recorrente) { recorrente = it }
                     Choice("Tipo", listOf("d" to "Desejo / conforto", "e" to "Essencial"), if (desejo) "d" else "e") { desejo = it == "d" }
                     PrimaryButton("Analisar", {
-                        result = data.evalPurchase(PurchaseInput(desc.trim(), parseMoney(valor), mode, parcelas.toIntOrNull() ?: 1, parseMoney(juros), parseMoney(recorrente), desejo))
-                    }, Modifier.fillMaxWidth(), )
+                        val r = data.evalPurchase(PurchaseInput(desc.trim(), parseMoney(valor), mode, parcelas.toIntOrNull() ?: 1, parseMoney(juros), parseMoney(recorrente), desejo))
+                        result = r
+                        dot.react(when (r.level) { Level.OK -> "Isso cabe no orçamento."; Level.WARN -> "Cabe, mas pense bem."; Level.BAD -> "Eu seguraria essa compra." }, when (r.level) { Level.OK -> com.persondot.ui.dot.Mood.HAPPY; Level.WARN -> com.persondot.ui.dot.Mood.NEUTRAL; Level.BAD -> com.persondot.ui.dot.Mood.WORRIED })
+                    }, Modifier.fillMaxWidth())
                 }
             }
         }

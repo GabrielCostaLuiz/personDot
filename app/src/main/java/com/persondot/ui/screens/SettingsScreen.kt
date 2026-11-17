@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +34,7 @@ private sealed interface UpdateState {
 }
 
 @Composable
-fun SettingsScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier = Modifier) {
+fun SettingsScreen(data: FinanceData, vm: FinanceViewModel, tipsEnabled: Boolean, onTipsChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<String?>(null) }
@@ -80,6 +81,18 @@ fun SettingsScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier =
                 StatRow("Rendimento real esperado", "${"%.1f".format(s.realRate * 100)}% ao ano")
                 StatRow("Reserva de emergência", "${s.reserveMonths} meses de essenciais")
                 StatRow("Aporte mensal padrão", brl(s.aporteLongo), sub = "IPCA+ começa em ${mLabel(s.ipcaStart.ifBlank { null })}")
+            }
+        }
+        item {
+            BentoCard {
+                SectionHeader("Dot")
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Dicas do Dot nas telas", color = AppTextWhite, fontWeight = FontWeight.SemiBold)
+                        Text("A faixa fina no topo com dicas e reações. Desligue se preferir o app mais limpo.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = tipsEnabled, onCheckedChange = onTipsChange, colors = SwitchDefaults.colors(checkedTrackColor = CyberGreen))
+                }
             }
         }
         item {

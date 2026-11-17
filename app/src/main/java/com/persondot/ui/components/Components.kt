@@ -1,6 +1,9 @@
 package com.persondot.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,4 +135,22 @@ fun SoftButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 @Composable
 fun EmptyHint(text: String) {
     Text(text, color = SecondaryText, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 10.dp))
+}
+
+/** Anel de progresso animado (0 a 1) com um valor no centro e um rótulo embaixo. */
+@Composable
+fun ScoreRing(progress: Float, center: String, label: String, color: Color, modifier: Modifier = Modifier, size: Dp = 78.dp) {
+    val p by animateFloatAsState(progress.coerceIn(0f, 1f), tween(1000), label = "ring")
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                val w = this.size.minDimension * 0.13f
+                val d = this.size.minDimension - w
+                drawArc(BorderColor, 0f, 360f, false, Offset(w / 2, w / 2), Size(d, d), style = Stroke(w))
+                drawArc(color, -90f, 360f * p, false, Offset(w / 2, w / 2), Size(d, d), style = Stroke(w, cap = StrokeCap.Round))
+            }
+            Text(center, color = AppTextWhite, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
+        }
+        Text(label, color = SecondaryText, style = MaterialTheme.typography.labelSmall)
+    }
 }

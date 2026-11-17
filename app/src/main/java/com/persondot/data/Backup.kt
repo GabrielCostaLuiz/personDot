@@ -6,7 +6,11 @@ import com.persondot.domain.FinanceData
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Backup em JSON: o mesmo arquivo serve para exportar, importar e levar seus dados para outro aparelho. */
+/**
+ * Backup em JSON: o mesmo arquivo serve para exportar, importar e levar seus dados para outro aparelho.
+ * Os ajustes por mês referenciam o custo pela POSIÇÃO em "fixed" (fixedIndex), já que os ids mudam ao importar.
+ * Ao ler, [MonthEntry.fixedId] carrega essa posição; o repositório troca pelo id real.
+ */
 object Backup {
 
     private fun JSONObject.str(k: String, def: String = "") = if (has(k) && !isNull(k)) getString(k) else def
@@ -14,9 +18,10 @@ object Backup {
     private fun JSONObject.int(k: String, def: Int = 0) = if (has(k) && !isNull(k)) getInt(k) else def
     private fun JSONObject.bool(k: String, def: Boolean = false) = if (has(k) && !isNull(k)) getBoolean(k) else def
     private fun JSONObject.strOrNull(k: String) = if (has(k) && !isNull(k)) getString(k).ifBlank { null } else null
+    private fun JSONObject.dblOrNull(k: String) = if (has(k) && !isNull(k)) getDouble(k) else null
     private fun JSONArray?.objs(): List<JSONObject> = if (this == null) emptyList() else List(length()) { getJSONObject(it) }
 
-    /** Lê o JSON. Lança IllegalArgumentException se não parecer um backup do app. */
+    /** Lê o JSON. Lança IllegalArgumentException se não parecer um backup do app. Campos antigos (ex.: "planned") são ignorados. */
     fun fromJson(text: String): FinanceData {
         val o = try { JSONObject(text) } catch (e: Exception) { throw IllegalArgumentException("Arquivo inválido", e) }
         require(o.has("accounts") && o.has("debts")) { "Arquivo inválido" }
@@ -40,10 +45,15 @@ object Backup {
             )
         }
         val fixed = o.optJSONArray("fixed").objs().map {
-            FixedCost(name = it.str("name"), amount = it.dbl("amount"), grp = it.str("group", "CASA").uppercase(), onCard = it.bool("card"))
+            FixedCost(
+                name = it.str("name"), amount = it.dbl("amount"), grp = it.str("group", "CASA").uppercase(), onCard = it.bool("card"),
+                startsAt = it.strOrNull("startsAt"), endsBefore = it.strOrNull("endsBefore")
+            )
         }
-        val planned = o.optJSONArray("planned").objs().map {
-            Planned(desc = it.str("desc"), amount = it.dbl("amount"), month = it.str("month"), note = it.str("note"), paid = it.bool("paid"))
+        val entries = o.optJSONArray("monthEntries").objs().mapNotNull {
+            val idx = it.int("fixedIndex", -1)
+            if (idx !in fixed.indices) null
+            else MonthEntry(fixedId = idx.toLong(), month = it.str("month"), status = it.str("status", MonthEntry.PREVISTO).uppercase(), amount = it.dblOrNull("amount"))
         }
         val expenses = o.optJSONArray("expenses").objs().map { Expense(desc = it.str("desc"), amount = it.dbl("amount"), cat = it.str("cat", "Outros"), date = it.str("date")) }
         val aportes = o.optJSONObject("aportes")?.let { a -> a.keys().asSequence().associateWith { a.getDouble(it) } } ?: emptyMap()
@@ -60,12 +70,12 @@ object Backup {
             Goal(name = it.str("name"), targetValue = it.dbl("targetValue"), currentValue = it.dbl("currentValue"), category = it.str("category", "OUTRA"),
                 dueDate = it.optLong("dueDate", 0L), note = it.str("note"))
         }
-        return FinanceData(settings, accounts, receivables, debts, fixed, planned, expenses, aportes, reflections, goals)
+        return FinanceData(settings, accounts, receivables, debts, fixed, entries, expenses, aportes, reflections, goals)
     }
 
     fun toJson(d: FinanceData): String {
         val o = JSONObject()
-        o.put("v", 1)
+        o.put("v", 2)
         o.put("settings", JSONObject().apply {
             put("income", d.settings.income); put("incomeDay", d.settings.incomeDay); put("multiplier", d.settings.multiplier)
             put("reserveMonths", d.settings.reserveMonths); put("realRate", d.settings.realRate)
@@ -78,8 +88,15 @@ object Backup {
                 JSONObject().put("month", it.month ?: JSONObject.NULL).put("amount", it.amount).put("paid", it.paid).put("includesSubs", it.includesSubs)
             }))
         }))
-        o.put("fixed", JSONArray(d.fixed.map { JSONObject().put("name", it.name).put("amount", it.amount).put("group", it.grp).put("card", it.onCard) }))
-        o.put("planned", JSONArray(d.planned.map { JSONObject().put("desc", it.desc).put("amount", it.amount).put("month", it.month).put("note", it.note).put("paid", it.paid) }))
+        o.put("fixed", JSONArray(d.fixed.map {
+            JSONObject().put("name", it.name).put("amount", it.amount).put("group", it.grp).put("card", it.onCard)
+                .put("startsAt", it.startsAt ?: JSONObject.NULL).put("endsBefore", it.endsBefore ?: JSONObject.NULL)
+        }))
+        val indexById = d.fixed.withIndex().associate { (i, f) -> f.id to i }
+        o.put("monthEntries", JSONArray(d.monthEntries.mapNotNull { e ->
+            val idx = indexById[e.fixedId] ?: return@mapNotNull null
+            JSONObject().put("fixedIndex", idx).put("month", e.month).put("status", e.status).put("amount", e.amount ?: JSONObject.NULL)
+        }))
         o.put("expenses", JSONArray(d.expenses.map { JSONObject().put("desc", it.desc).put("amount", it.amount).put("cat", it.cat).put("date", it.date) }))
         o.put("aportes", JSONObject().apply { d.aportes.forEach { (k, v) -> put(k, v) } })
         o.put("reflections", JSONArray(d.reflections.map {

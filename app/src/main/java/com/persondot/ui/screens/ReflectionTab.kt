@@ -352,7 +352,7 @@ fun CreateReflectionForm(
                         Icon(imageVector = Icons.Default.Warning, contentDescription = "Alerta", tint = ImpulseAmber, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Aviso: Essa compra adiará seu carro em até ${formatDelayDays(carDelayDays)} se mantiver seu ritmo de poupança.",
+                            text = "Aviso: Essa compra adiará suas metas em até ${formatDelayDays(carDelayDays)} se mantiver seu ritmo de poupança.",
                             color = ImpulseAmber,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold
@@ -379,7 +379,7 @@ fun CreateReflectionForm(
 
             // Q2
             QuestionSwitchRow(
-                question = "Isso me APROXIMA do Carro Novo?",
+                question = "Isso me aproxima das minhas metas?",
                 checked = helpsCarGoal,
                 onCheckedChange = { helpsCarGoal = it }
             )
@@ -640,7 +640,7 @@ fun ActiveReflectionCard(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Gatilho: ${reflection.emotionSource} • Adia o carro em ${formatDelayDays(carDelayDays)}.",
+                    text = "Gatilho: ${reflection.emotionSource} • Adia suas metas em ${formatDelayDays(carDelayDays)}.",
                     color = SecondaryText,
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 11.sp
