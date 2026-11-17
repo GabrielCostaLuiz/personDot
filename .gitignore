@@ -1,0 +1,24 @@
+# Gradle / Android Studio
+*.iml
+.gradle/
+.kotlin/
+/build/
+/app/build/
+/captures/
+.externalNativeBuild
+.cxx
+local.properties
+/.idea/
+.DS_Store
+
+# Segredos e dados pessoais: NUNCA vão para o repositório
+*.jks
+*.keystore
+keystore.properties
+.env
+/dados/
+meus-dados*.json
+persondot-*.json
+
+# Ferramentas locais
+.claude/
