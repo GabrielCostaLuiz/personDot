@@ -14,7 +14,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: Aceitar licenças do Android SDK (o runner já traz o SDK)
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - uses: gradle/actions/setup-gradle@v4
       - name: Testes e build de debug
         run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
