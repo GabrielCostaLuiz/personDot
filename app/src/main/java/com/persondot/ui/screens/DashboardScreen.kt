@@ -28,7 +28,10 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 
 @Composable
-fun DashboardScreen(data: FinanceData, vm: FinanceViewModel, onGoSettings: () -> Unit, onGoFuture: () -> Unit, modifier: Modifier = Modifier) {
+fun DashboardScreen(
+    data: FinanceData, vm: FinanceViewModel, dotId: String, dotName: String, onOpenDot: () -> Unit,
+    onGoSettings: () -> Unit, onGoFuture: () -> Unit, modifier: Modifier = Modifier
+) {
     val c = remember(data) { data.core() }
     val health = remember(data) { data.health() }
     val nextMonth = remember { addMonths(monthKey(LocalDate.now()), 1) }
@@ -36,6 +39,7 @@ fun DashboardScreen(data: FinanceData, vm: FinanceViewModel, onGoSettings: () ->
     var dialog by remember { mutableStateOf<Any?>(null) }
 
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)) {
+        item { com.persondot.ui.dot.DotGreetingCard(data, dotId, dotName, onOpenDot) }
         if (data.isEmpty) item { EmptyStateCard(onGoSettings) }
         else {
             item { WelcomeCard(data, c) }

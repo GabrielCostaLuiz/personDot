@@ -19,11 +19,16 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("persondot", Context.MODE_PRIVATE)
         setContent {
             val dark = remember { mutableStateOf(prefs.getBoolean("dark", true)) }
+            val dotId = remember { mutableStateOf(prefs.getString("dot_id", "original") ?: "original") }
+            val dotName = remember { mutableStateOf(prefs.getString("dot_name", "Dot") ?: "Dot") }
             PersonDotTheme(darkTheme = dark.value) {
                 val vm: FinanceViewModel = viewModel()
                 MainScreen(
                     viewModel = vm, isDarkTheme = dark.value,
-                    onToggleTheme = { dark.value = !dark.value; prefs.edit().putBoolean("dark", dark.value).apply() }
+                    onToggleTheme = { dark.value = !dark.value; prefs.edit().putBoolean("dark", dark.value).apply() },
+                    dotId = dotId.value, dotName = dotName.value,
+                    onDotChange = { dotId.value = it; prefs.edit().putString("dot_id", it).apply() },
+                    onDotNameChange = { dotName.value = it; prefs.edit().putString("dot_name", it).apply() }
                 )
             }
         }

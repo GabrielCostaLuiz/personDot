@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- anel + ponto: "dot" -->
-    <path android:fillColor="#10B981" android:pathData="M54,54m-26,0a26,26 0,1 1,52 0a26,26 0,1 1,-52 0" />
-    <path android:fillColor="#0A0A0A" android:pathData="M54,54m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0" />
-    <path android:fillColor="#06B6D4" android:pathData="M54,54m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" />
+    <!-- corpo claro do Dot, ocupando a parte de baixo e deixando um canto escuro no alto à direita -->
+    <path android:pathData="M10,112 L10,58 C10,36 28,20 50,24 C72,28 98,40 98,66 L98,112 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:startX="20" android:startY="26" android:endX="90" android:endY="110" android:type="linear">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFB4B6BC" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- olhos em pílula inclinados -->
+    <group android:pivotX="45" android:pivotY="66" android:rotation="-16">
+        <path android:fillColor="#FF222225" android:pathData="M40.5,58 A4.5,4.5 0 0 1 49.5,58 L49.5,74 A4.5,4.5 0 0 1 40.5,74 Z" />
+    </group>
+    <group android:pivotX="69" android:pivotY="62" android:rotation="-16">
+        <path android:fillColor="#FF222225" android:pathData="M64.5,54 A4.5,4.5 0 0 1 73.5,54 L73.5,70 A4.5,4.5 0 0 1 64.5,70 Z" />
+    </group>
 </vector>

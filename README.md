@@ -16,6 +16,7 @@ O visual vem do [mindful-finance](https://github.com/GabrielCostaLuiz/mindful-fi
 | **Futuro** | Dívidas e parcelas (pagar a próxima, editar, adicionar), calendário de alívio e fluxo mês a mês com aporte editável |
 | **Metas** | **Contas riscadas** (regra dos 200: valor da conta × 200), metas gerais e **carro à vista** com custo real de propriedade (TCO) |
 | **Ajustes** | Parâmetros do plano, backup (exportar/importar), atualização do app e tema |
+| **Meu Dot** (ícone no topo) | O avatar do PersonDot: 9 Dots para escolher (Original, Nuvem, Gota, Flor, Coração, Bolha, Almofada, Pedrinha, Noite), com nome editável. Os olhos piscam e a expressão muda com a sua saúde financeira. Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt` |
 
 Tudo é editável. Os dados ficam **só no aparelho** (Room/SQLite). Nada vai para servidor.
 
