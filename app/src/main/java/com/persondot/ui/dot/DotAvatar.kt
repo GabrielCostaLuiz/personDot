@@ -32,7 +32,7 @@ data class DotDesign(val id: String, val name: String, val shape: DotShape, val 
 
 /** Os Dots que você pode escolher. Para criar outro, é só adicionar uma linha aqui. */
 val DotCatalog: List<DotDesign> = listOf(
-    DotDesign("original", "Original", DotShape.GHOST, Color(0xFFEDEDF0), eye = Color(0xFF1C1C1E)),
+    DotDesign("original", "Original", DotShape.SPHERE, Color(0xFF10B981)),
     DotDesign("nuvem", "Nuvem", DotShape.CLOUD, Color(0xFF2563EB)),
     DotDesign("gota", "Gota", DotShape.DROP, Color(0xFFF97316)),
     DotDesign("flor", "Flor", DotShape.FLOWER, Color(0xFF14B8A6)),
@@ -175,15 +175,15 @@ private fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink
         val eyeW = body * 0.085f
         val eyeH = body * 0.20f
         val (tilt, hScale) = when (mood) {
-            Mood.HAPPY -> -12f to 1.10f
-            Mood.NEUTRAL -> -14f to 1.0f
-            Mood.WORRIED -> 14f to 1.0f
-            Mood.SLEEPY -> -6f to 0.42f
+            Mood.HAPPY -> 10f to 1.10f
+            Mood.NEUTRAL -> 8f to 1.0f
+            Mood.WORRIED -> -12f to 1.0f
+            Mood.SLEEPY -> 0f to 0.42f
         }
         val v = hScale * blink
         for (dx in listOf(-gap, gap)) {
             val c = Offset(cx + dx, cy)
-            rotate(tilt, c) {
+            rotate(if (dx < 0) -tilt else tilt, c) {
                 scale(1f, v, c) {
                     drawRoundRect(design.eye, Offset(c.x - eyeW / 2, c.y - eyeH / 2), Size(eyeW, eyeH), CornerRadius(eyeW / 2))
                 }
