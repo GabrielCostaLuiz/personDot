@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -24,7 +26,7 @@ import com.persondot.ui.viewmodel.FinanceViewModel
 
 private enum class Tab(val title: String, val heading: String, val active: ImageVector, val inactive: ImageVector) {
     PAINEL("Painel", "Painel de Controle", Icons.Filled.Speed, Icons.Outlined.Speed),
-    GASTOS("Gastos", "Gastos do mês", Icons.Filled.ReceiptLong, Icons.Outlined.ReceiptLong),
+    GASTOS("Gastos", "Gastos do mês", Icons.AutoMirrored.Filled.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong),
     DECIDIR("Decidir", "Posso comprar?", Icons.Filled.Psychology, Icons.Outlined.Psychology),
     FUTURO("Futuro", "Dívidas e fluxo", Icons.Filled.CreditCard, Icons.Outlined.CreditCard),
     METAS("Metas", "Contas riscadas e metas", Icons.Filled.Flag, Icons.Outlined.Flag)

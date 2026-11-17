@@ -7,7 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -56,7 +56,7 @@ fun HelpAccordion(
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(
-                    imageVector = Icons.Default.HelpOutline,
+                    imageVector = Icons.AutoMirrored.Filled.HelpOutline,
                     contentDescription = "Entenda o card",
                     tint = if (expanded) CyberTeal else SecondaryText,
                     modifier = Modifier.size(14.dp)
