@@ -36,6 +36,12 @@ As análises usam as regras do seu próprio plano; não são recomendação fina
 
 <https://github.com/GabrielCostaLuiz/personDot/releases/latest/download/PersonDot.apk>
 
+> **Se o Android bloquear a instalação** ("App não instalado", ou o Play Protect recusa): no emulador Android 17 com
+> Play Protect, o instalador recusou o APK (`VerifyApps: REJECT`), enquanto `adb install` funcionou. O Google passou a
+> exigir verificação de desenvolvedor para apps de fora da Play Store em alguns países, incluindo o Brasil. Caminhos:
+> registrar o app (nome do pacote `com.persondot.app` + chave de assinatura) no Android Developer Console, na conta
+> gratuita para hobby/uso pessoal; instalar por `adb install PersonDot.apk`; ou publicar na Play Store (teste interno).
+
 **Atualizar:** em **Ajustes → Atualização do app → Procurar atualização**. O app consulta a última release,
 baixa o APK e abre o instalador. Seus dados são mantidos.
 
