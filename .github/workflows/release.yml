@@ -38,11 +38,16 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Testes e APK assinado
+      - name: Testes
+        timeout-minutes: 15
+        run: ./gradlew testDebugUnitTest --no-daemon --console=plain
+
+      - name: APK assinado
+        timeout-minutes: 20
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --console=plain
 
       - name: Publicar release
         env:

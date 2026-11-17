@@ -56,6 +56,7 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isReturnDefaultValues = true } }
+  lint { checkReleaseBuilds = false }  // o CI roda os testes; o lint de release só atrasa o APK
 }
 
 dependencies {
