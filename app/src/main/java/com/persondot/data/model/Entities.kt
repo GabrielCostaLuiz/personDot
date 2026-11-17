@@ -1,5 +1,6 @@
 package com.persondot.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -14,8 +15,23 @@ data class Settings(
     val reserveMonths: Int = 6,          // meses de essenciais na reserva de emergência
     val realRate: Double = 0.06,         // rendimento real anual esperado
     val aporteLongo: Double = 1000.0,    // aporte mensal padrão (depois da reserva)
-    val ipcaStart: String = ""           // mês (AAAA-MM) em que o IPCA+ começa
+    val ipcaStart: String = "",          // mês (AAAA-MM) em que o IPCA+ começa
+    /** Categorias dos gastos do dia a dia, separadas por "|". Editável em Ajustes. */
+    @ColumnInfo(defaultValue = "'$DEFAULT_CATEGORIES'") val categories: String = DEFAULT_CATEGORIES,
+    /** Nomes dos 3 grupos de custo (casa, trabalho, opcionais), separados por "|". Editável em Ajustes. */
+    @ColumnInfo(defaultValue = "'$DEFAULT_GROUP_NAMES'") val groupNames: String = DEFAULT_GROUP_NAMES
 )
+
+const val DEFAULT_CATEGORIES = "Mercado extra|Alimentação fora|Lazer|Transporte|Beleza e saúde|Compras|Outros"
+const val DEFAULT_GROUP_NAMES = "Casa · essenciais|Trabalho|Opcionais"
+
+val Settings.categoryList: List<String> get() = categories.split('|').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("Outros") }
+
+/** Nome do grupo de custo ([FixedCost.GRP_CASA], [FixedCost.GRP_TRABALHO] ou [FixedCost.GRP_OPCIONAL]). */
+fun Settings.groupLabel(grp: String): String {
+    val i = when (grp) { FixedCost.GRP_CASA -> 0; FixedCost.GRP_TRABALHO -> 1; else -> 2 }
+    return groupNames.split('|').getOrNull(i)?.trim()?.ifEmpty { null } ?: DEFAULT_GROUP_NAMES.split('|')[i]
+}
 
 /** Conta onde o dinheiro está. kind: RESERVA (liquidez diária) ou IPCA (balde das contas riscadas). */
 @Entity(tableName = "accounts")

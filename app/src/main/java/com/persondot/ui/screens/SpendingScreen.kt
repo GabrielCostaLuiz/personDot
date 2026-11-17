@@ -140,7 +140,7 @@ private fun MonthSegment(data: FinanceData, vm: FinanceViewModel) {
                 val items = plan.forecasts.filter { it.cost.grp == grp }.sortedWith(compareBy({ it.status == ForecastStatus.REMOVIDO }, { -it.amount }))
                 val counted = items.filter { it.counts }
                 BentoCard {
-                    SectionHeader(title, "+ custo") { dialog = NewFixed(grp) }
+                    SectionHeader(data.settings.groupLabel(grp), "+ custo") { dialog = NewFixed(grp) }
                     if (items.isEmpty()) EmptyHint(hint)
                     items.forEach { f -> ForecastRow(f, cutOn && grp == FixedCost.GRP_OPCIONAL && f.status == ForecastStatus.PREVISTO) { dialog = f } }
                     if (counted.isNotEmpty()) {
@@ -185,10 +185,10 @@ private fun MonthSegment(data: FinanceData, vm: FinanceViewModel) {
     }
 
     when (val d = dialog) {
-        "newExpense" -> ExpenseDialog(null, data.accounts, { e, acc -> vm.saveExpense(e, acc) }, null) { dialog = null }
-        is Expense -> ExpenseDialog(d, data.accounts, { e, acc -> vm.saveExpense(e, acc) }, { vm.deleteExpense(d) }) { dialog = null }
+        "newExpense" -> ExpenseDialog(null, data.accounts, data.settings.categoryList, { e, acc -> vm.saveExpense(e, acc) }, null) { dialog = null }
+        is Expense -> ExpenseDialog(d, data.accounts, data.settings.categoryList, { e, acc -> vm.saveExpense(e, acc) }, { vm.deleteExpense(d) }) { dialog = null }
         is Forecast -> ForecastActions(d, data, vm, dot) { dialog = null }
-        is NewFixed -> FixedDialog(null, d.group, month, { vm.saveFixed(it); dot.react("Novo custo previsto adicionado.", Mood.NEUTRAL) }, null) { dialog = null }
+        is NewFixed -> FixedDialog(null, d.group, month, data.settings, { vm.saveFixed(it); dot.react("Novo custo previsto adicionado.", Mood.NEUTRAL) }, null) { dialog = null }
         is PayMonthInst -> PayNextDialog("${d.line.debtName} · ${mLabel(d.line.inst.month)}", d.line.inst.amount, data.accounts, { acc -> vm.payInstallment(d.line.inst, acc); dot.react("Parcela paga. Falta menos!", Mood.HAPPY) }) { dialog = null }
         is DebtInstallment -> InstallmentDialog(d, { vm.saveInstallment(it) }, { vm.deleteInstallment(d) }) { dialog = null }
     }
@@ -361,6 +361,6 @@ private fun FlowSegment(data: FinanceData, vm: FinanceViewModel) {
         }
     }
     when (val d = dialog) {
-        is AporteTarget -> AporteDialog(d.month, d.current, { vm.saveAporte(d.month, it) }) { dialog = null }
+        is AporteTarget -> AporteDialog(d.month, d.current, { vm.saveAporte(d.month, it) }, onReset = { vm.clearAporte(d.month) }) { dialog = null }
     }
 }

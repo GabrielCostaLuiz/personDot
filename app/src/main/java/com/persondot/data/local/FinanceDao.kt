@@ -52,6 +52,7 @@ interface FinanceDao {
     @Query("DELETE FROM debt_installments WHERE debtId = :debtId") suspend fun deleteInstallmentsOf(debtId: Long)
     @Query("DELETE FROM debts WHERE id = :debtId") suspend fun deleteDebtRow(debtId: Long)
     @Query("DELETE FROM month_entries WHERE fixedId = :fixedId") suspend fun deleteEntriesOf(fixedId: Long)
+    @Query("DELETE FROM aportes WHERE month = :month") suspend fun deleteAporte(month: String)
 
     @Transaction
     suspend fun deleteDebt(debtId: Long) { deleteInstallmentsOf(debtId); deleteDebtRow(debtId) }

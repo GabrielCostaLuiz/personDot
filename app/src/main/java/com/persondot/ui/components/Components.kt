@@ -46,15 +46,23 @@ fun LabelText(text: String, color: Color = SecondaryText) {
     Text(text.uppercase(), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
 }
 
-/** Título de seção com um botão opcional à direita (ex.: "+ conta"). */
+/**
+ * Título de seção: uma barrinha de destaque + rótulo, e (opcional) uma ação em forma de pílula à direita.
+ * A ação é um Box clicável compacto: botões de texto padrão têm 48dp de altura mínima e empurravam o título para baixo.
+ */
 @Composable
 fun SectionHeader(title: String, actionText: String? = null, onAction: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        LabelText(title)
+    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(width = 4.dp, height = 14.dp).clip(RoundedCornerShape(2.dp)).background(CyberGreen))
+            Spacer(Modifier.width(8.dp))
+            LabelText(title)
+        }
         if (actionText != null && onAction != null) {
-            TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
-                Text(actionText, color = CyberGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(CyberGreen.copy(alpha = 0.14f)).clickable(onClick = onAction)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) { Text(actionText, color = CyberGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
     }
 }

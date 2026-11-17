@@ -13,7 +13,7 @@ import com.persondot.data.model.*
         Settings::class, Account::class, Receivable::class, Debt::class, DebtInstallment::class,
         FixedCost::class, MonthEntry::class, Expense::class, Aporte::class, Reflection::class, Goal::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -37,9 +37,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 -> v3: categorias e nomes de grupos viram dados editáveis. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE settings ADD COLUMN categories TEXT NOT NULL DEFAULT '$DEFAULT_CATEGORIES'")
+                db.execSQL("ALTER TABLE settings ADD COLUMN groupNames TEXT NOT NULL DEFAULT '$DEFAULT_GROUP_NAMES'")
+            }
+        }
+
         fun get(context: Context): AppDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "persondot.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { INSTANCE = it }
         }
     }

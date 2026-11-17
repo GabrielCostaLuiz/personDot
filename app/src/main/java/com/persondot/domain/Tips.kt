@@ -31,14 +31,3 @@ fun FinanceData.tipsFor(screen: TipScreen, today: LocalDate = LocalDate.now()): 
         }
     }
 }
-
-/** Perguntas sugeridas no chat, de acordo com a situação. */
-fun FinanceData.chatSuggestions(): List<String> = buildList {
-    add("Como estou?")
-    add("O que eu faço agora?")
-    add("Quanto posso gastar?")
-    if (fixed.any { it.grp == com.persondot.data.model.FixedCost.GRP_OPCIONAL }) add("O que posso cortar?")
-    add("Posso comprar algo de 1500?")
-    if (debts.any { it.remaining > 0 }) add("Como estão minhas parcelas?")
-    add("Como está minha reserva?")
-}

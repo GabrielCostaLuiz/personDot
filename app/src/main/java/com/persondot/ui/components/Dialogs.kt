@@ -89,7 +89,7 @@ fun MonthChoice(label: String, selected: String, onSelect: (String) -> Unit, all
 
 @Composable
 private fun AccountChoice(label: String, accounts: List<Account>, selected: String, onSelect: (String) -> Unit) {
-    Choice(label, accounts.map { it.id.toString() to it.name } + ("" to "Nenhuma"), selected, onSelect)
+    Choice(label, accounts.filter { it.kind != Account.KIND_IPCA }.map { it.id.toString() to it.name } + ("" to "Nenhuma"), selected, onSelect)
 }
 
 // ---------- diálogos de cada entidade ----------
@@ -130,10 +130,8 @@ fun ReceivableDialog(
     }
 }
 
-val EXPENSE_CATEGORIES = listOf("Mercado extra", "Alimentação fora", "Lazer", "Transporte", "Carro", "Beleza e saúde", "Compras", "Outros")
-
 @Composable
-fun ExpenseDialog(initial: Expense?, accounts: List<Account>, onSave: (Expense, Long?) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
+fun ExpenseDialog(initial: Expense?, accounts: List<Account>, categories: List<String>, onSave: (Expense, Long?) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
     var desc by remember { mutableStateOf(initial?.desc ?: "") }
     var amount by remember { mutableStateOf(editMoney(initial?.amount ?: 0.0)) }
     var cat by remember { mutableStateOf(initial?.cat ?: "Lazer") }
@@ -144,27 +142,29 @@ fun ExpenseDialog(initial: Expense?, accounts: List<Account>, onSave: (Expense, 
     }, confirmEnabled = desc.isNotBlank() && dateRe.matches(date), onDelete = onDelete?.let { { it(); onDismiss() } }) {
         Field("Descrição", desc, { desc = it })
         MoneyField("Valor (R$)", amount) { amount = it }
-        Choice("Categoria", EXPENSE_CATEGORIES.map { it to it }, cat) { cat = it }
+        Choice("Categoria", (categories + listOfNotNull(initial?.cat)).distinct().map { it to it }, cat) { cat = it }
         Field("Data (AAAA-MM-DD)", date, { date = it })
         if (initial == null) AccountChoice("Descontar de qual conta?", accounts, acc) { acc = it }
     }
 }
 
 @Composable
-fun FixedDialog(initial: FixedCost?, defaultGroup: String, startMonth: String, onSave: (FixedCost) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
+fun FixedDialog(initial: FixedCost?, defaultGroup: String, startMonth: String, settings: Settings, onSave: (FixedCost) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var amount by remember { mutableStateOf(editMoney(initial?.amount ?: 0.0)) }
     var grp by remember { mutableStateOf(initial?.grp ?: defaultGroup) }
     var onCard by remember { mutableStateOf(initial?.onCard ?: false) }
     var from by remember { mutableStateOf(initial?.startsAt ?: startMonth) }
+    var until by remember { mutableStateOf(initial?.endsBefore ?: "") }
     FormDialog(if (initial == null) "Novo custo previsto" else "Editar custo previsto", onDismiss, {
-        onSave((initial ?: FixedCost(name = "", amount = 0.0)).copy(name = name.trim(), amount = parseMoney(amount), grp = grp, onCard = onCard, startsAt = from.ifBlank { null })); onDismiss()
+        onSave((initial ?: FixedCost(name = "", amount = 0.0)).copy(name = name.trim(), amount = parseMoney(amount), grp = grp, onCard = onCard, startsAt = from.ifBlank { null }, endsBefore = until.ifBlank { null })); onDismiss()
     }, confirmEnabled = name.isNotBlank(), onDelete = onDelete?.let { { it(); onDismiss() } }) {
         Field("Nome", name, { name = it })
         MoneyField("Valor mensal (R$)", amount) { amount = it }
-        Choice("Tipo", listOf(FixedCost.GRP_CASA to "Casa (essencial)", FixedCost.GRP_TRABALHO to "Trabalho", FixedCost.GRP_OPCIONAL to "Opcional"), grp) { grp = it }
+        Choice("Grupo", listOf(FixedCost.GRP_CASA, FixedCost.GRP_TRABALHO, FixedCost.GRP_OPCIONAL).map { it to settings.groupLabel(it) }, grp) { grp = it }
         Choice("Cobrado no cartão?", listOf("n" to "Não", "s" to "Sim"), if (onCard) "s" else "n") { onCard = it == "s" }
         MonthChoice("Vale a partir de", from, { from = it }, allowNone = true)
+        if (initial != null) MonthChoice("Cancelado a partir de (vazio = continua)", until, { until = it }, allowNone = true)
         if (initial != null) Text("Mudar o valor aqui muda todos os meses ainda em aberto. Para mudar só um mês, toque no custo dentro do mês.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -177,7 +177,7 @@ fun FixedDialog(initial: FixedCost?, defaultGroup: String, startMonth: String, o
 fun ForecastDialog(
     f: Forecast, accounts: List<Account>,
     onConfirm: (Double, Long?) -> Unit, onAdjust: (Double) -> Unit, onRemove: () -> Unit, onRestore: () -> Unit,
-    onUndo: () -> Unit, onCancelFrom: () -> Unit, onEditCost: () -> Unit, onDismiss: () -> Unit
+    onUndo: () -> Unit, onCancelFrom: () -> Unit, onEditCost: () -> Unit, onNewAccount: () -> Unit, onDismiss: () -> Unit
 ) {
     var amount by remember { mutableStateOf(editMoney(f.amount)) }
     var acc by remember { mutableStateOf(accounts.firstOrNull { it.kind != Account.KIND_IPCA }?.id?.toString() ?: "") }
@@ -192,7 +192,8 @@ fun ForecastDialog(
                         Text("Previsto. Quando pagar, confirme aqui. Se o valor mudou, ajuste antes.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
                         MoneyField("Valor deste mês (R$)", amount) { amount = it }
                         if (f.adjusted || value != f.cost.amount) Text("Valor padrão: ${brl(f.cost.amount)}", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-                        Choice("Descontar de qual conta?", accounts.map { it.id.toString() to it.name } + ("" to "Nenhuma"), acc) { acc = it }
+                        Choice("Descontar de qual conta?", accounts.filter { it.kind != Account.KIND_IPCA }.map { it.id.toString() to it.name } + ("" to "Nenhuma"), acc) { acc = it }
+                        TextButton(onClick = onNewAccount) { Text("+ criar uma conta", color = CyberGreen) }
                         PrimaryButton("Confirmar pagamento de ${brl(value)}", { onConfirm(value, acc.toLongOrNull()); onDismiss() }, Modifier.fillMaxWidth())
                         if (value != f.amount && value > 0) SoftButton("Só ajustar o valor deste mês", { onAdjust(value); onDismiss() }, Modifier.fillMaxWidth())
                         SoftButton("Tirar só deste mês", { onRemove(); onDismiss() }, Modifier.fillMaxWidth())
@@ -267,10 +268,11 @@ fun PayNextDialog(label: String, amount: Double, accounts: List<Account>, onConf
 }
 
 @Composable
-fun AporteDialog(month: String, current: Double, onSave: (Double) -> Unit, onDismiss: () -> Unit) {
+fun AporteDialog(month: String, current: Double, onSave: (Double) -> Unit, onReset: (() -> Unit)? = null, onDismiss: () -> Unit) {
     var v by remember { mutableStateOf(editMoney(current)) }
     FormDialog("Aporte de ${mLabel(month)}", onDismiss, { onSave(parseMoney(v)); onDismiss() }) {
         MoneyField("Valor (R$)", v) { v = it }
+        if (onReset != null) SoftButton("Voltar ao aporte padrão", { onReset(); onDismiss() }, Modifier.fillMaxWidth())
     }
 }
 
@@ -314,4 +316,31 @@ fun GoalDialog(initial: Goal?, onSave: (Goal) -> Unit, onDelete: (() -> Unit)?, 
         MoneyField("Já separado (R$)", current) { current = it }
         Choice("Tipo", listOf("VIAGEM" to "Viagem", "ESTUDO" to "Estudo", "OUTRA" to "Outra"), cat) { cat = it }
     }
+}
+
+
+/** Edita um único número (renda, aporte, meses...). [decimal] = aceita centavos. */
+@Composable
+fun NumberDialog(title: String, label: String, initial: Double, decimal: Boolean = true, hint: String? = null, onSave: (Double) -> Unit, onDismiss: () -> Unit) {
+    var v by remember { mutableStateOf(if (initial == 0.0) "" else if (decimal) editMoney(initial) else initial.toLong().toString()) }
+    FormDialog(title, onDismiss, { onSave(parseMoney(v)); onDismiss() }) {
+        if (hint != null) Text(hint, color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+        Field(label, v, { v = if (decimal) it else it.filter(Char::isDigit) }, if (decimal) KeyboardType.Decimal else KeyboardType.Number)
+    }
+}
+
+/** Edita um texto (nome do Dot, de uma categoria, de um grupo...). */
+@Composable
+fun TextDialog(title: String, label: String, initial: String, onSave: (String) -> Unit, onDelete: (() -> Unit)? = null, onDismiss: () -> Unit) {
+    var v by remember { mutableStateOf(initial) }
+    FormDialog(title, onDismiss, { onSave(v.trim()); onDismiss() }, confirmEnabled = v.isNotBlank(), onDelete = onDelete?.let { { it(); onDismiss() } }) {
+        Field(label, v, { v = it })
+    }
+}
+
+/** Escolhe um mês (ex.: início do IPCA+). */
+@Composable
+fun MonthPickDialog(title: String, current: String, allowNone: Boolean, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var m by remember { mutableStateOf(current) }
+    FormDialog(title, onDismiss, { onSave(m); onDismiss() }) { MonthChoice("Mês", m, { m = it }, allowNone = allowNone) }
 }

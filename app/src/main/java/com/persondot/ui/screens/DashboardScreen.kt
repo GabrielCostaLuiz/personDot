@@ -38,11 +38,10 @@ private fun greeting(): String {
  */
 @Composable
 fun DashboardScreen(
-    data: FinanceData, vm: FinanceViewModel, dotId: String, dotName: String,
+    data: FinanceData, vm: FinanceViewModel, design: DotDesign, dotName: String,
     onNavigate: (Dest) -> Unit, modifier: Modifier = Modifier
 ) {
     val dot = LocalDot.current
-    val design = dotById(dotId)
     val today = remember { LocalDate.now() }
     val now = remember { monthKey(today) }
     val c = remember(data) { data.core() }
@@ -201,6 +200,7 @@ private fun MonthStat(label: String, value: String, color: androidx.compose.ui.g
 @Composable
 fun ForecastActions(f: Forecast, data: FinanceData, vm: FinanceViewModel, dot: DotController, onDismiss: () -> Unit) {
     var editCost by remember { mutableStateOf(false) }
+    var newAccount by remember { mutableStateOf(false) }
     ForecastDialog(
         f, data.accounts,
         onConfirm = { amt, acc -> vm.confirmForecast(f, amt, acc); dot.react("${f.cost.name} confirmado. Menos uma!", Mood.HAPPY) },
@@ -210,7 +210,9 @@ fun ForecastActions(f: Forecast, data: FinanceData, vm: FinanceViewModel, dot: D
         onUndo = { vm.undoForecast(f); dot.react("Desfiz a confirmação.", Mood.NEUTRAL) },
         onCancelFrom = { vm.cancelFrom(f); dot.react("${f.cost.name} cancelado daqui pra frente. Economia de ${brl0(f.cost.amount * 12)} por ano!", Mood.HAPPY) },
         onEditCost = { editCost = true },
+        onNewAccount = { newAccount = true },
         onDismiss = { if (!editCost) onDismiss() }
     )
-    if (editCost) FixedDialog(f.cost, f.cost.grp, f.month, { vm.saveFixed(it) }, { vm.deleteFixed(f.cost) }) { editCost = false; onDismiss() }
+    if (newAccount) AccountDialog(null, { vm.saveAccount(it) }, null) { newAccount = false }
+    if (editCost) FixedDialog(f.cost, f.cost.grp, f.month, data.settings, { vm.saveFixed(it) }, { vm.deleteFixed(f.cost) }) { editCost = false; onDismiss() }
 }

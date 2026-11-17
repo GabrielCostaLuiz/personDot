@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.persondot.ui.dot
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -9,10 +12,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,104 +25,195 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.persondot.domain.*
+import com.persondot.ui.components.PrimaryButton
+import com.persondot.ui.components.SoftButton
+import com.persondot.ui.components.parseMoney
 import com.persondot.ui.screens.textFieldDarkColors
 import com.persondot.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class ChatMessage(val id: Long, val fromUser: Boolean, val text: String, val tool: String? = null)
+data class ChatMessage(val id: Long, val fromUser: Boolean, val text: String, val tool: String? = null, val detailOf: Draft? = null)
 
-/** Conversa do Dot. Fica fora da tela para não se perder ao trocar de aba. */
+/** Conversa e pergunta em construção. Ficam fora da tela para não se perderem ao sair e voltar. */
 @Stable
 class ChatState {
     val messages = mutableStateListOf<ChatMessage>()
+    val blocks = mutableStateListOf<Block>()
     var pending by mutableStateOf<DotAction?>(null)
     var thinking by mutableStateOf(false)
-    var quick by mutableStateOf<List<String>>(emptyList())
+    var detailed by mutableStateOf(false)
     private var seq = 0L
     fun nextId() = ++seq
 }
 
-/** Chat com o Dot: você pergunta em português e ele chama as ferramentas do app para responder. */
+/**
+ * A conversa com o Dot em tela cheia. Você não digita: monta a pergunta em blocos (tema → variações → valores) e
+ * o Dot responde chamando a ferramenta certa. O modo "Direto" dá a conclusão; o "Detalhado", os números.
+ */
 @Composable
 fun DotChatScreen(
     data: FinanceData, state: ChatState, design: DotDesign, dotName: String,
-    onRun: (DotAction) -> Unit, onCustomize: () -> Unit, modifier: Modifier = Modifier
+    onRun: (DotAction) -> Unit, onCustomize: () -> Unit, onExit: () -> Unit, modifier: Modifier = Modifier
 ) {
     val dot = LocalDot.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    var input by remember { mutableStateOf("") }
 
-    fun send(raw: String) {
-        val text = raw.trim()
-        if (text.isEmpty() || state.thinking) return
-        state.messages += ChatMessage(state.nextId(), true, text)
-        state.quick = emptyList(); input = ""
+    // o Dot "abre" a conversa: entra pulando e crescendo
+    val pop = remember { Animatable(0.4f) }
+    LaunchedEffect(Unit) { dot.react(null, Mood.HAPPY); pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 220f)) }
+
+    fun deliver(reply: BrainReply, draft: Draft?) {
+        state.thinking = false
+        state.pending = reply.pending
+        state.messages += ChatMessage(state.nextId(), false, reply.text, reply.tool, detailOf = if (reply.hasMore) draft else null)
+        reply.run?.let(onRun)
+        dot.react(null, when (reply.level) { Level.OK -> Mood.HAPPY; Level.WARN -> Mood.NEUTRAL; Level.BAD -> Mood.WORRIED; null -> Mood.HAPPY })
+    }
+
+    fun ask(draft: Draft, detailedNow: Boolean, echo: String?) {
+        if (state.thinking) return
+        if (echo != null) state.messages += ChatMessage(state.nextId(), true, echo)
+        state.blocks.clear()
         state.thinking = true
-        scope.launch {
-            delay(650)   // o Dot "pensa" um instante, como numa conversa
-            val reply = DotBrain.reply(text, data, state.pending)
-            state.thinking = false
-            state.pending = reply.pending
-            state.messages += ChatMessage(state.nextId(), false, reply.text, reply.tool)
-            state.quick = reply.quick
-            reply.run?.let(onRun)
-            dot.react(null, when (reply.level) { Level.OK -> Mood.HAPPY; Level.WARN -> Mood.NEUTRAL; Level.BAD -> Mood.WORRIED; null -> Mood.HAPPY })
-        }
+        scope.launch { delay(550); deliver(DotBrain.answer(draft, data, detailedNow), draft) }
     }
 
-    LaunchedEffect(Unit) {
-        if (state.messages.isEmpty()) {
-            val hello = DotBrain.reply("oi", data)
-            state.messages += ChatMessage(state.nextId(), false, hello.text)
-            state.quick = hello.quick
-        }
+    fun answerPending(yes: Boolean) {
+        val p = state.pending ?: return
+        state.messages += ChatMessage(state.nextId(), true, if (yes) "Sim" else "Não")
+        state.pending = null; state.thinking = true
+        scope.launch { delay(400); deliver(if (yes) DotBrain.confirm(p) else DotBrain.decline(), null) }
     }
+
+    LaunchedEffect(Unit) { if (state.messages.isEmpty()) state.messages += ChatMessage(state.nextId(), false, DotBrain.greeting().text) }
     LaunchedEffect(state.messages.size, state.thinking) {
-        val last = state.messages.size + (if (state.thinking) 1 else 0) - 1
-        if (last >= 0) listState.animateScrollToItem(last)
+        val count = state.messages.size + (if (state.thinking) 1 else 0)
+        if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
     Column(modifier.fillMaxSize().imePadding()) {
-        // cabeçalho: o Dot em pessoa
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            DotAvatar(design, size = 76.dp, mood = dot.mood ?: moodFor(data), bounceKey = dot.bounceKey, thinking = state.thinking, onClick = { dot.react(null, Mood.HAPPY) })
-            Spacer(Modifier.width(10.dp))
+        // cabeçalho próprio: sair, o Dot, o modo de resposta e personalizar
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onExit) { Icon(Icons.Filled.Close, "Sair da conversa", tint = AppTextWhite) }
+            DotAvatar(design, size = 66.dp, mood = dot.mood ?: moodFor(data), bounceKey = dot.bounceKey, thinking = state.thinking, modifier = Modifier.scale(pop.value), onClick = { dot.react(null, Mood.HAPPY) })
+            Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
-                Text(dotName, color = AppTextWhite, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-                Text(if (state.thinking) "pensando…" else "pergunte com suas palavras", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                Text(dotName, color = AppTextWhite, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                Text(if (state.thinking) "pensando…" else "monte sua pergunta", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
             }
-            TextButton(onClick = onCustomize) { Text("Meu Dot", color = CyberGreen, fontWeight = FontWeight.Bold) }
+            IconButton(onClick = onCustomize) { Icon(Icons.Outlined.Palette, "Meu Dot", tint = CyberGreen) }
+        }
+        // modo de resposta
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Respostas", color = SecondaryText, style = MaterialTheme.typography.labelMedium)
+            listOf(false to "Diretas", true to "Detalhadas").forEach { (v, label) ->
+                FilterChip(
+                    selected = state.detailed == v, onClick = { state.detailed = v }, label = { Text(label) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberGreen, selectedLabelColor = Color.Black)
+                )
+            }
         }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(state.messages, key = { it.id }) { m -> Bubble(m, design) }
             if (state.thinking) item(key = "thinking") { TypingBubble(design) }
+            val last = state.messages.lastOrNull()
+            if (!state.thinking && last != null && !last.fromUser && last.detailOf != null) item(key = "more") {
+                AssistChip(
+                    onClick = { ask(last.detailOf, true, "Mais detalhes") }, label = { Text("Mais detalhes") },
+                    colors = AssistChipDefaults.assistChipColors(labelColor = CyberGreen), border = AssistChipDefaults.assistChipBorder(true, borderColor = CyberGreen)
+                )
+            }
         }
 
-        if (state.quick.isNotEmpty() && !state.thinking) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-                items(state.quick) { q ->
-                    AssistChip(onClick = { send(q) }, label = { Text(q) }, colors = AssistChipDefaults.assistChipColors(labelColor = AppTextWhite), border = AssistChipDefaults.assistChipBorder(true, borderColor = CardBorderGlance))
+        BuilderPanel(state, data, onAsk = { val d = state.blocks.toDraft(); ask(d, state.detailed, d.sentence()) }, onAnswerPending = ::answerPending)
+    }
+}
+
+/** O painel onde a pergunta é construída, bloco a bloco. */
+@Composable
+private fun BuilderPanel(state: ChatState, data: FinanceData, onAsk: () -> Unit, onAnswerPending: (Boolean) -> Unit) {
+    val draft = state.blocks.toDraft()
+    val step = nextStep(draft, data)
+    var amountText by remember(step.input?.field, state.blocks.size) { mutableStateOf("") }
+    var extraInput by remember(state.blocks.size) { mutableStateOf<AmountInput?>(null) }
+    val input = extraInput ?: step.input
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)).background(DarkSurface)
+            .border(1.dp, CardBorderGlance, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (state.pending != null) {
+            Text("Posso fazer isso?", color = SecondaryText, style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrimaryButton("Sim", { onAnswerPending(true) }, Modifier.weight(1f))
+                SoftButton("Não", { onAnswerPending(false) }, Modifier.weight(1f))
+            }
+            return@Column
+        }
+
+        // a pergunta até agora
+        if (state.blocks.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(state.blocks.size) { i ->
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(CyberGreen.copy(alpha = 0.16f)).padding(horizontal = 12.dp, vertical = 7.dp)) {
+                            Text(state.blocks[i].label, color = CyberGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+                TextButton(onClick = { state.blocks.removeAt(state.blocks.lastIndex) }) { Text("desfazer", color = SecondaryText) }
+            }
+        }
+
+        Text(if (extraInput != null) extraInput!!.label else step.prompt, color = AppTextWhite, fontWeight = FontWeight.SemiBold)
+
+        if (extraInput == null && step.options.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                step.options.forEach { b ->
+                    AssistChip(
+                        onClick = { state.blocks += b }, label = { Text(b.label) },
+                        colors = AssistChipDefaults.assistChipColors(labelColor = AppTextWhite), border = AssistChipDefaults.assistChipBorder(true, borderColor = CardBorderGlance)
+                    )
                 }
             }
         }
 
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, bottom = 10.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), singleLine = true,
-                placeholder = { Text("Fale com o $dotName…") }, shape = RoundedCornerShape(24.dp), colors = textFieldDarkColors(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send(input) })
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = { send(input) }, enabled = input.isNotBlank() && !state.thinking, colors = IconButtonDefaults.filledIconButtonColors(containerColor = CyberGreen, contentColor = Color.Black)) {
-                Icon(Icons.AutoMirrored.Filled.Send, "Enviar")
+        if (input != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amountText, onValueChange = { amountText = it }, modifier = Modifier.weight(1f), singleLine = true,
+                    label = { Text(input.label) }, placeholder = { Text(input.hint) }, colors = textFieldDarkColors(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                val v = parseMoney(amountText)
+                FilledIconButton(
+                    onClick = { state.blocks += AmountBlock(input.field, v); extraInput = null },
+                    enabled = v > 0, colors = IconButtonDefaults.filledIconButtonColors(containerColor = CyberGreen, contentColor = Color.Black)
+                ) { Text("OK", fontWeight = FontWeight.Bold) }
             }
+        }
+
+        if (step.complete) {
+            if (extraInput == null && step.extras.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Acrescentar:", color = SecondaryText, style = MaterialTheme.typography.labelMedium, modifier = Modifier.align(Alignment.CenterVertically))
+                    step.extras.forEach { e ->
+                        AssistChip(
+                            onClick = { if (e.block != null) state.blocks += e.block else extraInput = e.input }, label = { Text("+ ${e.label}") },
+                            colors = AssistChipDefaults.assistChipColors(labelColor = CyberTeal), border = AssistChipDefaults.assistChipBorder(true, borderColor = CyberTeal)
+                        )
+                    }
+                }
+            }
+            PrimaryButton(if (draft.topic == Topic.REGISTRAR) "Registrar" else "Perguntar", onAsk, Modifier.fillMaxWidth())
         }
     }
 }
@@ -128,14 +222,14 @@ fun DotChatScreen(
 private fun Bubble(m: ChatMessage, design: DotDesign) {
     if (m.fromUser) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Box(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)).background(CyberGreen).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Box(Modifier.widthIn(max = 310.dp).clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)).background(CyberGreen).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Text(m.text, color = Color.Black, style = MaterialTheme.typography.bodyMedium)
             }
         }
     } else {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             DotAvatar(design, size = 30.dp, animate = false, modifier = Modifier.padding(end = 6.dp))
-            Column(Modifier.widthIn(max = 310.dp)) {
+            Column(Modifier.widthIn(max = 320.dp)) {
                 Box(Modifier.clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)).padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Text(m.text, color = AppTextWhite, style = MaterialTheme.typography.bodyMedium)
                 }

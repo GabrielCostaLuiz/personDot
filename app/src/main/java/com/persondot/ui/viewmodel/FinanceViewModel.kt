@@ -94,6 +94,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
     fun deleteExpense(e: Expense) = run { repo.delete(e) }
     fun saveAporte(month: String, amount: Double) = run { repo.save(Aporte(month, amount)) }
+    /** Volta o mês ao aporte padrão. */
+    fun clearAporte(month: String) = run { repo.clearAporte(month) }
 
     // ---- metas ----
     fun saveGoal(g: Goal) = run { repo.save(g) }

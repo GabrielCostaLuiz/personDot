@@ -30,7 +30,8 @@ object Backup {
         val settings = Settings(
             income = s.dbl("income"), incomeDay = s.int("incomeDay", 10), multiplier = s.dbl("multiplier", 200.0),
             reserveMonths = s.int("reserveMonths", 6), realRate = s.dbl("realRate", 0.06),
-            aporteLongo = s.dbl("aporteLongo", 1000.0), ipcaStart = s.str("ipcaStart")
+            aporteLongo = s.dbl("aporteLongo", 1000.0), ipcaStart = s.str("ipcaStart"),
+            categories = s.str("categories", DEFAULT_CATEGORIES), groupNames = s.str("groupNames", DEFAULT_GROUP_NAMES)
         )
         val accounts = o.optJSONArray("accounts").objs().map {
             Account(name = it.str("name"), balance = it.dbl("balance"), kind = it.str("kind", "RESERVA").uppercase(), note = it.str("note"))
@@ -80,6 +81,7 @@ object Backup {
             put("income", d.settings.income); put("incomeDay", d.settings.incomeDay); put("multiplier", d.settings.multiplier)
             put("reserveMonths", d.settings.reserveMonths); put("realRate", d.settings.realRate)
             put("aporteLongo", d.settings.aporteLongo); put("ipcaStart", d.settings.ipcaStart)
+            put("categories", d.settings.categories); put("groupNames", d.settings.groupNames)
         })
         o.put("accounts", JSONArray(d.accounts.map { JSONObject().put("name", it.name).put("balance", it.balance).put("kind", it.kind).put("note", it.note) }))
         o.put("receivables", JSONArray(d.receivables.map { JSONObject().put("desc", it.desc).put("amount", it.amount).put("received", it.received) }))

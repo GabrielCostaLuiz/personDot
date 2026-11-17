@@ -12,14 +12,13 @@ O visual vem do [mindful-finance](https://github.com/GabrielCostaLuiz/mindful-fi
 |---|---|
 | **Painel** | Visão geral: o Dot com o seu **norte** (o que fazer agora), "livre de verdade", anéis de saúde, reserva e contas riscadas, o que falta confirmar no mês, contas e entradas a receber |
 | **Gastos** | **Mês**: todo custo é uma **previsão** até você **confirmar** o pagamento (dá para ajustar o valor do mês, tirar só daquele mês ou cancelar daqui pra frente); simulação de corte de opcionais mostrando o que sairia; gastos do dia a dia. **Parcelas**: dívidas e faturas. **Fluxo**: calendário de alívio e mês a mês |
-| **Dot** | Chat com o Dot: você pergunta em português e ele chama as ferramentas do app (saúde, simulador de compra, resumo do mês, corte, parcelas, reserva, "e se...?"). Ações que mudam dados pedem um "sim" antes |
+| **Dot** | Conversa em tela cheia (sem cabeçalho nem barra inferior; sai pelo X). Você **monta a pergunta em blocos**: escolhe o tema, depois as variações (valor, à vista ou em Nx, com ou sem juros, mês...), e o Dot responde chamando a ferramenta certa. Respostas **diretas** (a conclusão) ou **detalhadas** (os números). Ações que mudam dados pedem um "sim" |
 | **Decidir** | **Vale a pena?** simula uma compra à vista ou parcelada e **Reflexão 24h** com resfriamento anti-impulso |
 | **Futuro** | Evoluir: linha do tempo das conquistas, **"E se...?"** (guardar mais, cortar opcionais, aumento de renda), contas riscadas (regra dos 200) e metas |
-| **Ajustes** | Parâmetros do plano, backup (exportar/importar), atualização do app, tema e dicas do Dot |
-| **Meu Dot** (pelo chat) | 9 Dots para escolher (Original, Nuvem, Gota, Flor, Coração, Bolha, Almofada, Pedrinha, Noite), com nome editável. Os olhos piscam, ele pula nas ações e a expressão muda com a sua saúde financeira. Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt` |
+| **Ajustes** | Um hub com o Dot no topo e os assuntos embaixo: **Meu plano**, **Contas e saldos**, **Custos previstos**, **Categorias e grupos**, **Aportes por mês**, **Dot e aparência**, **Dados e backup** e **Atualização do app**. Nada é fixo: renda, categorias de gasto, nomes dos grupos, aportes de cada mês, o visual e a cor do Dot, tudo se edita aqui |
 
-O Dot aparece em todas as telas numa faixa fina com dicas e reações (dá para desligar em Ajustes). O chat **não usa IA nem internet**:
-ele entende frases por padrões e usa as mesmas funções do app, então tudo roda no seu aparelho.
+O Dot aparece em todas as telas numa faixa fina com dicas e reações (dá para desligar em Ajustes). O chat **não usa IA nem internet**: as perguntas em blocos chamam as mesmas funções do app, então tudo roda no seu aparelho.
+Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt`.
 
 Tudo é editável. Os dados ficam **só no aparelho** (Room/SQLite). Nada vai para servidor.
 

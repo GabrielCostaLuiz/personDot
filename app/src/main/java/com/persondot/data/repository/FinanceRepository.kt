@@ -45,6 +45,7 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun delete(r: Reflection) = dao.delete(r)
     suspend fun delete(g: Goal) = dao.delete(g)
     suspend fun deleteDebt(id: Long) = dao.deleteDebt(id)
+    suspend fun clearAporte(month: String) = dao.deleteAporte(month)
 
     /** Define a situação de um custo em um mês. */
     suspend fun setEntry(fixedId: Long, month: String, status: String, amount: Double?, accountId: Long?) {
