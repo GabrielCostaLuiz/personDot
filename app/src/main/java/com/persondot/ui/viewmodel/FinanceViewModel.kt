@@ -11,7 +11,13 @@ import com.persondot.domain.FinanceData
 import com.persondot.domain.Forecast
 import com.persondot.domain.addMonths
 import com.persondot.domain.monthKey
+import com.persondot.domain.core
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,7 +29,20 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     val data: StateFlow<FinanceData> = repo.data.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FinanceData())
 
-    private fun run(block: suspend () -> Unit) { viewModelScope.launch { block() } }
+    /** Primeira leitura do banco (para saber se é a primeira vez no app). */
+    suspend fun firstData(): FinanceData = repo.data.first()
+
+    /** Roda a alteração e, em seguida, atualiza os widgets da tela inicial. */
+    private fun run(block: suspend () -> Unit) { viewModelScope.launch { block(); com.persondot.widget.updateDotWidgets(getApplication()) } }
+
+    /** Guarda uma foto do patrimônio do mês atual sempre que ele muda (alimenta os relatórios). */
+    @OptIn(FlowPreview::class)
+    private val snapshotRecorder = viewModelScope.launch {
+        data.map { it.core() to it.isEmpty }.distinctUntilChanged().debounce(2000).collect { (c, empty) ->
+            if (!empty) repo.save(Snapshot(monthKey(LocalDate.now()), c.inHand, c.ipca, c.owed))
+            com.persondot.widget.updateDotWidgets(getApplication())
+        }
+    }
 
     /** Soma [delta] ao saldo da conta [accountId] (usado ao pagar/receber). */
     private suspend fun adjust(accountId: Long?, delta: Double) {
@@ -96,6 +115,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun saveAporte(month: String, amount: Double) = run { repo.save(Aporte(month, amount)) }
     /** Volta o mês ao aporte padrão. */
     fun clearAporte(month: String) = run { repo.clearAporte(month) }
+
+    // ---- faturamento (MEI) ----
+    fun saveRevenue(month: String, amount: Double) = run { repo.save(Revenue(month, amount)) }
+    fun clearRevenue(month: String) = run { repo.clearRevenue(month) }
 
     // ---- metas ----
     fun saveGoal(g: Goal) = run { repo.save(g) }

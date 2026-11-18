@@ -16,13 +16,13 @@ class FinanceRepository(private val dao: FinanceDao) {
     private val part2 = combine(dao.fixedCosts(), dao.monthEntries(), dao.expenses(), dao.aportes(), dao.reflections(), ::P2)
 
     /** Tudo o que o app mostra, num único objeto reativo. */
-    val data: Flow<FinanceData> = combine(part1, part2, dao.goals()) { p1, p2, goals ->
+    val data: Flow<FinanceData> = combine(part1, part2, dao.goals(), dao.revenues(), dao.snapshots()) { p1, p2, goals, revenues, snapshots ->
         val byDebt = p1.i.groupBy { it.debtId }
         FinanceData(
             settings = p1.s ?: Settings(), accounts = p1.a, receivables = p1.r,
             debts = p1.d.map { DebtWithInstallments(it, byDebt[it.id].orEmpty()) },
             fixed = p2.f, monthEntries = p2.me, expenses = p2.e, aportes = p2.ap.associate { it.month to it.amount },
-            reflections = p2.rf, goals = goals
+            reflections = p2.rf, goals = goals, revenues = revenues, snapshots = snapshots
         )
     }
 
@@ -36,6 +36,9 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun save(r: Reflection) = dao.upsert(r)
     suspend fun save(g: Goal) = dao.upsert(g)
     suspend fun saveDebt(d: Debt): Long = dao.upsert(d)
+    suspend fun save(r: Revenue) = dao.upsert(r)
+    suspend fun save(s: Snapshot) = dao.upsert(s)
+    suspend fun clearRevenue(month: String) = dao.deleteRevenue(month)
 
     suspend fun delete(a: Account) = dao.delete(a)
     suspend fun delete(r: Receivable) = dao.delete(r)
@@ -83,6 +86,8 @@ class FinanceRepository(private val dao: FinanceDao) {
         d.aportes.forEach { (m, v) -> dao.upsert(Aporte(m, v)) }
         d.reflections.forEach { dao.upsert(it.copy(id = 0)) }
         d.goals.forEach { dao.upsert(it.copy(id = 0)) }
+        d.revenues.forEach { dao.upsert(it) }
+        d.snapshots.forEach { dao.upsert(it) }
     }
 
     suspend fun clearAll() = dao.clearAll()

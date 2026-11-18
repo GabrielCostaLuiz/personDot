@@ -14,6 +14,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PersonDot">
             <intent-filter>
@@ -21,6 +22,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lançamento rápido de gasto aberto pelo widget: janela transparente, não puxa o app para frente. -->
+        <activity
+            android:name=".widget.QuickExpenseActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.PersonDot.QuickEntry"
+            android:windowSoftInputMode="adjustResize" />
+
+        <receiver android:name=".widget.DotInfoWidget" android:exported="false" android:label="Dot — painel">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_info" />
+        </receiver>
+        <receiver android:name=".widget.DotQuickWidget" android:exported="false" android:label="Dot — gasto rápido">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_quick_info" />
+        </receiver>
 
         <!-- Usado só para entregar o APK baixado ao instalador do Android (atualização do app). -->
         <provider

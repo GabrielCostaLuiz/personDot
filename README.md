@@ -12,8 +12,8 @@ O visual vem do [mindful-finance](https://github.com/GabrielCostaLuiz/mindful-fi
 |---|---|
 | **Painel** | Visão geral: o Dot com o seu **norte** (o que fazer agora), "livre de verdade", anéis de saúde, reserva e contas riscadas, o que falta confirmar no mês, contas e entradas a receber |
 | **Gastos** | **Mês**: todo custo é uma **previsão** até você **confirmar** o pagamento (dá para ajustar o valor do mês, tirar só daquele mês ou cancelar daqui pra frente); simulação de corte de opcionais mostrando o que sairia; gastos do dia a dia. **Parcelas**: dívidas e faturas. **Fluxo**: calendário de alívio e mês a mês |
-| **Dot** | Conversa em tela cheia (sem cabeçalho nem barra inferior; sai pelo X). Você **monta a pergunta em blocos**: escolhe o tema, depois as variações (valor, à vista ou em Nx, com ou sem juros, mês...), e o Dot responde chamando a ferramenta certa. Respostas **diretas** (a conclusão) ou **detalhadas** (os números). Ações que mudam dados pedem um "sim" |
-| **Decidir** | **Vale a pena?** simula uma compra à vista ou parcelada e **Reflexão 24h** com resfriamento anti-impulso |
+| **Dot** | Conversa em tela cheia (sem cabeçalho nem barra inferior; sai pelo X). Você **monta a pergunta em blocos**: escolhe o tema, depois as variações (valor, à vista ou em Nx, com ou sem juros, mês...), e o Dot responde chamando a ferramenta certa. Respostas **diretas** (a conclusão) ou **detalhadas** (os números). O Dot também **guia**: marcos, sugestões (multiplicador, rendimento, aporte), opinião sobre gastos e alertas de MEI/DAS. Ele cadastra, edita e apaga coisas e inicia a **Reflexão 24h**, sempre pedindo um "sim" antes. **Vale a pena?** abre como sheet no Painel e em Gastos |
+| **Relatórios** | Evolução do patrimônio, faturamento e limite do MEI/PJ, gastos por categoria e comparativos mês a mês |
 | **Futuro** | Evoluir: linha do tempo das conquistas, **"E se...?"** (guardar mais, cortar opcionais, aumento de renda), contas riscadas (regra dos 200) e metas |
 | **Ajustes** | Um hub com o Dot no topo e os assuntos embaixo: **Meu plano**, **Contas e saldos**, **Custos previstos**, **Categorias e grupos**, **Aportes por mês**, **Dot e aparência**, **Dados e backup** e **Atualização do app**. Nada é fixo: renda, categorias de gasto, nomes dos grupos, aportes de cada mês, o visual e a cor do Dot, tudo se edita aqui |
 
@@ -21,6 +21,14 @@ O Dot aparece em todas as telas numa faixa fina com dicas e reações (dá para 
 Para criar um Dot novo, adicione uma linha em `ui/dot/DotAvatar.kt`.
 
 Tudo é editável. Os dados ficam **só no aparelho** (Room/SQLite). Nada vai para servidor.
+
+## Primeira vez
+
+O Dot conduz um onboarding interativo (visual e nome do Dot, renda, conta, custos fixos, MEI/PJ e plano de poupança), conversa no final e voa até o lugar dele no Painel. O ícone do app é o Dot padrão (nuvem roxa).
+
+## Widgets
+
+Dois widgets do Dot para a tela inicial: **Dot — painel** (livre de verdade, saúde, próximo passo, atalhos **+ Gasto** e **Falar com o Dot**) e **Dot — gasto rápido** (3×1). Atualizam sozinhos quando os números mudam.
 
 ## Método
 

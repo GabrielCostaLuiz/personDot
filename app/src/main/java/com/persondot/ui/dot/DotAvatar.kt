@@ -32,7 +32,7 @@ data class DotDesign(val id: String, val name: String, val shape: DotShape, val 
 
 /** Os Dots que você pode escolher. Para criar outro, é só adicionar uma linha aqui. */
 val DotCatalog: List<DotDesign> = listOf(
-    DotDesign("original", "Original", DotShape.SPHERE, Color(0xFF10B981)),
+    DotDesign("original", "Original", DotShape.CLOUD, Color(0xFF8B5CF6)),   // o Dot principal: também é o ícone do app
     DotDesign("nuvem", "Nuvem", DotShape.CLOUD, Color(0xFF2563EB)),
     DotDesign("gota", "Gota", DotShape.DROP, Color(0xFFF97316)),
     DotDesign("flor", "Flor", DotShape.FLOWER, Color(0xFF14B8A6)),
@@ -40,7 +40,7 @@ val DotCatalog: List<DotDesign> = listOf(
     DotDesign("bolha", "Bolha", DotShape.SPHERE, Color(0xFF1F1F23)),
     DotDesign("almofada", "Almofada", DotShape.PILLOW, Color(0xFFEC4899)),
     DotDesign("pedrinha", "Pedrinha", DotShape.BLOB, Color(0xFF16A34A)),
-    DotDesign("noite", "Noite", DotShape.CLOUD, Color(0xFF8B5CF6)),
+    DotDesign("esfera", "Esfera", DotShape.SPHERE, Color(0xFF10B981)),
 )
 
 fun dotById(id: String?): DotDesign = DotCatalog.firstOrNull { it.id == id } ?: DotCatalog.first()
@@ -129,7 +129,7 @@ private fun faceY(shape: DotShape) = when (shape) {
 @Composable
 fun DotAvatar(
     design: DotDesign, modifier: Modifier = Modifier, size: Dp = 160.dp, mood: Mood = Mood.NEUTRAL,
-    animate: Boolean = true, bounceKey: Int = 0, thinking: Boolean = false, onClick: (() -> Unit)? = null
+    animate: Boolean = true, bounceKey: Int = 0, thinking: Boolean = false, onClick: (() -> Unit)? = null, groundShadow: Boolean = true
 ) {
     val transition = rememberInfiniteTransition(label = "dot")
     val float by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "float")
@@ -161,10 +161,10 @@ fun DotAvatar(
     val p = if (animate && thinking) pulse else 0f
     val clickMod = if (onClick != null) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { wiggleKey++; onClick() } else Modifier
 
-    Canvas(modifier.size(size).then(clickMod)) { drawDot(design, mood, f, b, l, jump.value, wiggle.value * 7f, p) }
+    Canvas(modifier.size(size).then(clickMod)) { drawDot(design, mood, f, b, l, jump.value, wiggle.value * 7f, p, groundShadow) }
 }
 
-private fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink: Float, look: Float, jump: Float, tilt: Float, pulse: Float) {
+internal fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink: Float, look: Float, jump: Float, tilt: Float, pulse: Float, groundShadow: Boolean = true) {
     val s = this.size.minDimension
     val body = s * 0.78f
     val left = (s - body) / 2
@@ -173,7 +173,7 @@ private fun DrawScope.drawDot(design: DotDesign, mood: Mood, float: Float, blink
     // sombra no chão (diminui quando o Dot sobe)
     val lift = float * 0.5f + jump
     val shadowW = body * (0.62f + 0.10f * float - 0.14f * jump)
-    drawOval(Color.Black.copy(alpha = (0.22f - 0.06f * lift).coerceAtLeast(0.05f)), Offset((s - shadowW) / 2, s * 0.90f), Size(shadowW, s * 0.055f))
+    if (groundShadow) drawOval(Color.Black.copy(alpha = (0.22f - 0.06f * lift).coerceAtLeast(0.05f)), Offset((s - shadowW) / 2, s * 0.90f), Size(shadowW, s * 0.055f))
 
     val path = bodyPath(design.shape, body, body)
     val squash = 1f - jump * 0.06f + pulse * 0.025f

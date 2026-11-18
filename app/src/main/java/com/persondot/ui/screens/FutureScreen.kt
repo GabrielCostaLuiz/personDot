@@ -36,7 +36,7 @@ fun FutureScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier = M
     val w = remember(data, extra, raise, cutOn) { data.whatIf(extra.toDouble(), cutOn, raise.toDouble()) }
     val nextIdx = milestones.indexOfFirst { !it.done }
 
-    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp + LocalBarInset.current)) {
         // ---- linha do tempo ----
         item {
             BentoCard {

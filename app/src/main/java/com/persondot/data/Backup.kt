@@ -31,7 +31,8 @@ object Backup {
             income = s.dbl("income"), incomeDay = s.int("incomeDay", 10), multiplier = s.dbl("multiplier", 200.0),
             reserveMonths = s.int("reserveMonths", 6), realRate = s.dbl("realRate", 0.06),
             aporteLongo = s.dbl("aporteLongo", 1000.0), ipcaStart = s.str("ipcaStart"),
-            categories = s.str("categories", DEFAULT_CATEGORIES), groupNames = s.str("groupNames", DEFAULT_GROUP_NAMES)
+            categories = s.str("categories", DEFAULT_CATEGORIES), groupNames = s.str("groupNames", DEFAULT_GROUP_NAMES),
+            meiOn = s.bool("meiOn", true), meiLimit = s.dbl("meiLimit", 81000.0), customGroups = s.str("customGroups")
         )
         val accounts = o.optJSONArray("accounts").objs().map {
             Account(name = it.str("name"), balance = it.dbl("balance"), kind = it.str("kind", "RESERVA").uppercase(), note = it.str("note"))
@@ -71,7 +72,9 @@ object Backup {
             Goal(name = it.str("name"), targetValue = it.dbl("targetValue"), currentValue = it.dbl("currentValue"), category = it.str("category", "OUTRA"),
                 dueDate = it.optLong("dueDate", 0L), note = it.str("note"))
         }
-        return FinanceData(settings, accounts, receivables, debts, fixed, entries, expenses, aportes, reflections, goals)
+        val revenues = o.optJSONArray("revenues").objs().map { Revenue(it.str("month"), it.dbl("amount")) }
+        val snapshots = o.optJSONArray("snapshots").objs().map { Snapshot(it.str("month"), it.dbl("inHand"), it.dbl("ipca"), it.dbl("owed")) }
+        return FinanceData(settings, accounts, receivables, debts, fixed, entries, expenses, aportes, reflections, goals, revenues, snapshots)
     }
 
     fun toJson(d: FinanceData): String {
@@ -82,6 +85,7 @@ object Backup {
             put("reserveMonths", d.settings.reserveMonths); put("realRate", d.settings.realRate)
             put("aporteLongo", d.settings.aporteLongo); put("ipcaStart", d.settings.ipcaStart)
             put("categories", d.settings.categories); put("groupNames", d.settings.groupNames)
+            put("meiOn", d.settings.meiOn); put("meiLimit", d.settings.meiLimit); put("customGroups", d.settings.customGroups)
         })
         o.put("accounts", JSONArray(d.accounts.map { JSONObject().put("name", it.name).put("balance", it.balance).put("kind", it.kind).put("note", it.note) }))
         o.put("receivables", JSONArray(d.receivables.map { JSONObject().put("desc", it.desc).put("amount", it.amount).put("received", it.received) }))
@@ -108,6 +112,8 @@ object Backup {
                 .put("timerDurationHours", it.timerDurationHours).put("isApproved", it.isApproved).put("isCancelled", it.isCancelled)
                 .put("purchaseAwaitedTime", it.purchaseAwaitedTime)
         }))
+        o.put("revenues", JSONArray(d.revenues.map { JSONObject().put("month", it.month).put("amount", it.amount) }))
+        o.put("snapshots", JSONArray(d.snapshots.map { JSONObject().put("month", it.month).put("inHand", it.inHand).put("ipca", it.ipca).put("owed", it.owed) }))
         o.put("goals", JSONArray(d.goals.map {
             JSONObject().put("name", it.name).put("targetValue", it.targetValue).put("currentValue", it.currentValue).put("category", it.category)
                 .put("dueDate", it.dueDate).put("note", it.note)

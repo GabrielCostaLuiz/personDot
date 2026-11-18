@@ -15,7 +15,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.persondot.data.model.*
 import com.persondot.domain.*
-import com.persondot.ui.screens.textFieldDarkColors
 import com.persondot.ui.theme.*
 import java.time.LocalDate
 import java.util.Locale
@@ -23,10 +22,28 @@ import java.util.Locale
 // ---------- entrada/saída de números ----------
 fun parseMoney(s: String): Double {
     val t = s.trim()
-    val n = if (t.contains(',')) t.replace(".", "").replace(',', '.') else t
+    val n = when {
+        t.contains(',') -> t.replace(".", "").replace(',', '.')
+        Regex("""\d{1,3}(\.\d{3})+""").matches(t) -> t.replace(".", "")     // 5.000 = cinco mil
+        else -> t
+    }
     return n.toDoubleOrNull() ?: 0.0
 }
-fun editMoney(v: Double): String = if (v == 0.0) "" else String.format(Locale.forLanguageTag("pt-BR"), "%.2f", v)
+fun editMoney(v: Double): String = if (v == 0.0) "" else java.text.NumberFormat.getNumberInstance(Locale.forLanguageTag("pt-BR")).apply { minimumFractionDigits = 2; maximumFractionDigits = 2 }.format(v)
+
+/**
+ * Máscara de valor, do jeito natural de digitar: 5000 vira 5.000; para centavos, digite a vírgula (ou o ponto):
+ * 5000,5 vira 5.000,5. Os pontos de milhar são colocados sozinhos.
+ */
+fun maskMoney(raw: String): String {
+    val s = raw.filter { it.isDigit() || it == ',' || it == '.' }
+    val commaIdx = if (s.contains(',')) s.lastIndexOf(',') else if (s.endsWith('.')) s.length - 1 else -1
+    val intPart = (if (commaIdx >= 0) s.substring(0, commaIdx) else s).filter(Char::isDigit).trimStart('0').take(12)
+    val decPart = if (commaIdx >= 0) s.substring(commaIdx + 1).filter(Char::isDigit).take(2) else null
+    if (intPart.isEmpty() && decPart == null) return ""
+    val grouped = if (intPart.isEmpty()) "0" else intPart.reversed().chunked(3).joinToString(".").reversed()
+    return if (decPart != null) "$grouped,$decPart" else grouped
+}
 private val monthRe = Regex("""\d{4}-(0[1-9]|1[0-2])""")
 private val dateRe = Regex("""\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])""")
 fun validMonth(s: String) = monthRe.matches(s)
@@ -37,18 +54,11 @@ fun FormDialog(
     title: String, onDismiss: () -> Unit, onConfirm: () -> Unit, confirmEnabled: Boolean = true, confirmText: String = "Salvar",
     onDelete: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss, containerColor = DarkSurface,
-        title = { Text(title, color = AppTextWhite, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                content()
-                if (onDelete != null) SoftButton("Excluir", onDelete, danger = true, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = { TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmText, color = if (confirmEnabled) CyberGreen else SecondaryText, fontWeight = FontWeight.Bold) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = SecondaryText) } }
-    )
+    AppSheet(title, onDismiss, actions = {
+        if (onDelete != null) SoftButton("Excluir", onDelete, Modifier.weight(1f), danger = true)
+        SoftButton("Cancelar", onDismiss, Modifier.weight(1f))
+        PrimaryButton(confirmText, onConfirm, Modifier.weight(if (onDelete != null) 1.3f else 1.6f), enabled = confirmEnabled)
+    }, content = content)
 }
 
 @Composable
@@ -61,7 +71,14 @@ fun Field(label: String, value: String, onChange: (String) -> Unit, keyboard: Ke
 }
 
 @Composable
-fun MoneyField(label: String, value: String, onChange: (String) -> Unit) = Field(label, value, onChange, KeyboardType.Decimal)
+fun MoneyField(label: String, value: String, onChange: (String) -> Unit) {
+    // o cursor fica sempre no fim: os dígitos entram da direita para a esquerda
+    OutlinedTextField(
+        value = androidx.compose.ui.text.input.TextFieldValue(value, androidx.compose.ui.text.TextRange(value.length)),
+        onValueChange = { onChange(maskMoney(it.text)) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = textFieldDarkColors(), placeholder = { Text("0,00") }
+    )
+}
 
 @Composable
 fun Choice(label: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
@@ -137,6 +154,8 @@ fun ExpenseDialog(initial: Expense?, accounts: List<Account>, categories: List<S
     var cat by remember { mutableStateOf(initial?.cat ?: "Lazer") }
     var date by remember { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
     var acc by remember { mutableStateOf("") }
+    // gasto novo: já vem com a primeira conta marcada (o saldo dela é descontado); "Nenhuma" só registra
+    androidx.compose.runtime.LaunchedEffect(accounts) { if (initial == null && acc.isEmpty()) acc = accounts.firstOrNull { it.kind != Account.KIND_IPCA }?.id?.toString() ?: "" }
     FormDialog(if (initial == null) "Novo gasto" else "Editar gasto", onDismiss, {
         onSave((initial ?: Expense(desc = "", amount = 0.0, cat = cat, date = date)).copy(desc = desc.trim(), amount = parseMoney(amount), cat = cat, date = date), acc.toLongOrNull()); onDismiss()
     }, confirmEnabled = desc.isNotBlank() && dateRe.matches(date), onDelete = onDelete?.let { { it(); onDismiss() } }) {
@@ -161,7 +180,7 @@ fun FixedDialog(initial: FixedCost?, defaultGroup: String, startMonth: String, s
     }, confirmEnabled = name.isNotBlank(), onDelete = onDelete?.let { { it(); onDismiss() } }) {
         Field("Nome", name, { name = it })
         MoneyField("Valor mensal (R$)", amount) { amount = it }
-        Choice("Grupo", listOf(FixedCost.GRP_CASA, FixedCost.GRP_TRABALHO, FixedCost.GRP_OPCIONAL).map { it to settings.groupLabel(it) }, grp) { grp = it }
+        Choice("Grupo", settings.groups.map { it.id to it.name }, grp) { grp = it }
         Choice("Cobrado no cartão?", listOf("n" to "Não", "s" to "Sim"), if (onCard) "s" else "n") { onCard = it == "s" }
         MonthChoice("Vale a partir de", from, { from = it }, allowNone = true)
         if (initial != null) MonthChoice("Cancelado a partir de (vazio = continua)", until, { until = it }, allowNone = true)
@@ -182,38 +201,35 @@ fun ForecastDialog(
     var amount by remember { mutableStateOf(editMoney(f.amount)) }
     var acc by remember { mutableStateOf(accounts.firstOrNull { it.kind != Account.KIND_IPCA }?.id?.toString() ?: "") }
     val value = parseMoney(amount)
-    AlertDialog(
-        onDismissRequest = onDismiss, containerColor = DarkSurface,
-        title = { Text("${f.cost.name} · ${mLabel(f.month)}", color = AppTextWhite, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                when (f.status) {
-                    ForecastStatus.PREVISTO -> {
-                        Text("Previsto. Quando pagar, confirme aqui. Se o valor mudou, ajuste antes.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-                        MoneyField("Valor deste mês (R$)", amount) { amount = it }
-                        if (f.adjusted || value != f.cost.amount) Text("Valor padrão: ${brl(f.cost.amount)}", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-                        Choice("Descontar de qual conta?", accounts.filter { it.kind != Account.KIND_IPCA }.map { it.id.toString() to it.name } + ("" to "Nenhuma"), acc) { acc = it }
-                        TextButton(onClick = onNewAccount) { Text("+ criar uma conta", color = CyberGreen) }
-                        PrimaryButton("Confirmar pagamento de ${brl(value)}", { onConfirm(value, acc.toLongOrNull()); onDismiss() }, Modifier.fillMaxWidth())
-                        if (value != f.amount && value > 0) SoftButton("Só ajustar o valor deste mês", { onAdjust(value); onDismiss() }, Modifier.fillMaxWidth())
-                        SoftButton("Tirar só deste mês", { onRemove(); onDismiss() }, Modifier.fillMaxWidth())
-                        SoftButton("Cancelar daqui pra frente", { onCancelFrom(); onDismiss() }, Modifier.fillMaxWidth(), danger = true)
-                        TextButton(onClick = { onEditCost(); onDismiss() }) { Text("Editar o valor padrão", color = CyberGreen) }
-                    }
-                    ForecastStatus.PAGO -> {
-                        Text("Pago: ${brl(f.amount)}.", color = CyberGreen, fontWeight = FontWeight.Bold)
-                        Text("Desfazer devolve o valor à conta de onde saiu.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-                        SoftButton("Desfazer confirmação", { onUndo(); onDismiss() }, Modifier.fillMaxWidth())
-                    }
-                    ForecastStatus.REMOVIDO -> {
-                        Text("Removido só deste mês: não entra nas somas.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-                        PrimaryButton("Trazer de volta", { onRestore(); onDismiss() }, Modifier.fillMaxWidth())
-                    }
-                }
+    AppSheet(
+        "${f.cost.name} · ${mLabel(f.month)}", onDismiss,
+        actions = {
+            when (f.status) {
+                ForecastStatus.PREVISTO -> PrimaryButton("Confirmar pagamento de ${brl(value)}", { onConfirm(value, acc.toLongOrNull()); onDismiss() }, Modifier.fillMaxWidth(), enabled = value > 0)
+                ForecastStatus.PAGO -> PrimaryButton("Desfazer confirmação", { onUndo(); onDismiss() }, Modifier.fillMaxWidth())
+                ForecastStatus.REMOVIDO -> PrimaryButton("Trazer de volta", { onRestore(); onDismiss() }, Modifier.fillMaxWidth())
             }
-        },
-        confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Fechar", color = SecondaryText) } }
-    )
+        }
+    ) {
+        when (f.status) {
+            ForecastStatus.PREVISTO -> {
+                Text("Previsto. Quando pagar, confirme aqui. Se o valor mudou, ajuste antes.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                MoneyField("Valor deste mês (R$)", amount) { amount = it }
+                if (f.adjusted || value != f.cost.amount) Text("Valor padrão: ${brl(f.cost.amount)}", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                Choice("Descontar de qual conta?", accounts.filter { it.kind != Account.KIND_IPCA }.map { it.id.toString() to it.name } + ("" to "Nenhuma"), acc) { acc = it }
+                TextButton(onClick = onNewAccount) { Text("+ criar uma conta", color = CyberGreen) }
+                if (value != f.amount && value > 0) SoftButton("Só ajustar o valor deste mês", { onAdjust(value); onDismiss() }, Modifier.fillMaxWidth())
+                SoftButton("Tirar só deste mês", { onRemove(); onDismiss() }, Modifier.fillMaxWidth())
+                SoftButton("Cancelar daqui pra frente", { onCancelFrom(); onDismiss() }, Modifier.fillMaxWidth(), danger = true)
+                TextButton(onClick = { onEditCost(); onDismiss() }) { Text("Editar o valor padrão", color = CyberGreen) }
+            }
+            ForecastStatus.PAGO -> {
+                Text("Pago: ${brl(f.amount)}.", color = CyberGreen, fontWeight = FontWeight.Bold)
+                Text("Desfazer devolve o valor à conta de onde saiu.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+            }
+            ForecastStatus.REMOVIDO -> Text("Removido só deste mês: não entra nas somas.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable
@@ -325,7 +341,7 @@ fun NumberDialog(title: String, label: String, initial: Double, decimal: Boolean
     var v by remember { mutableStateOf(if (initial == 0.0) "" else if (decimal) editMoney(initial) else initial.toLong().toString()) }
     FormDialog(title, onDismiss, { onSave(parseMoney(v)); onDismiss() }) {
         if (hint != null) Text(hint, color = SecondaryText, style = MaterialTheme.typography.bodySmall)
-        Field(label, v, { v = if (decimal) it else it.filter(Char::isDigit) }, if (decimal) KeyboardType.Decimal else KeyboardType.Number)
+        if (decimal) MoneyField(label, v) { v = it } else Field(label, v, { v = it.filter(Char::isDigit) }, KeyboardType.Number)
     }
 }
 
@@ -343,4 +359,15 @@ fun TextDialog(title: String, label: String, initial: String, onSave: (String) -
 fun MonthPickDialog(title: String, current: String, allowNone: Boolean, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var m by remember { mutableStateOf(current) }
     FormDialog(title, onDismiss, { onSave(m); onDismiss() }) { MonthChoice("Mês", m, { m = it }, allowNone = allowNone) }
+}
+
+/** Cria um grupo de custo novo: nome e se é essencial (entra na reserva) ou opcional (pode ser cortado). */
+@Composable
+fun NewGroupDialog(onCreate: (String, Boolean) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var kind by remember { mutableStateOf("ESS") }
+    FormDialog("Novo grupo de custos", onDismiss, { onCreate(name.trim(), kind == "ESS"); onDismiss() }, confirmEnabled = name.isNotBlank()) {
+        Field("Nome do grupo", name, { name = it })
+        Choice("Tipo", listOf("ESS" to "Essencial (entra na reserva)", "OPC" to "Opcional (pode ser cortado)"), kind) { kind = it }
+    }
 }

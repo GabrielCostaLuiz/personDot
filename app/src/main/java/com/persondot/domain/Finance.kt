@@ -29,7 +29,9 @@ data class FinanceData(
     val expenses: List<Expense> = emptyList(),
     val aportes: Map<String, Double> = emptyMap(),
     val reflections: List<Reflection> = emptyList(),
-    val goals: List<Goal> = emptyList()
+    val goals: List<Goal> = emptyList(),
+    val revenues: List<Revenue> = emptyList(),
+    val snapshots: List<Snapshot> = emptyList()
 ) {
     val isEmpty get() = accounts.isEmpty() && debts.isEmpty() && fixed.isEmpty()
 }
@@ -95,7 +97,7 @@ fun FinanceData.core(): Core {
     val inHand = liquid.sumOf { it.balance }
     val toReceive = receivables.filter { !it.received }.sumOf { it.amount }
     val owed = debts.sumOf { it.remaining }
-    val essentials = fixed.filter { it.grp == FixedCost.GRP_CASA || it.grp == FixedCost.GRP_TRABALHO }.sumOf { it.amount }
+    val essentials = fixed.filter { settings.isEssential(it.grp) }.sumOf { it.amount }
     val reserveTarget = essentials * settings.reserveMonths
     val freeNow = inHand - owed
     return Core(ipca, inHand, toReceive, owed, essentials, reserveTarget, freeNow, freeNow + toReceive)
@@ -125,7 +127,9 @@ fun FinanceData.monthPlan(m: String): MonthPlan {
     val counted = fc.filter { it.counts }
     fun by(g: String) = counted.filter { it.cost.grp == g }.sumOf { it.amount }
     val inst = debts.flatMap { d -> d.installments.filter { it.month == m }.map { InstLine(d.debt.name, it) } }
-    val casa = by(FixedCost.GRP_CASA); val trabalho = by(FixedCost.GRP_TRABALHO); val opcional = by(FixedCost.GRP_OPCIONAL)
+    val trabalho = by(FixedCost.GRP_TRABALHO)
+    val casa = counted.filter { settings.isEssential(it.cost.grp) && it.cost.grp != FixedCost.GRP_TRABALHO }.sumOf { it.amount }
+    val opcional = counted.filter { settings.isOptional(it.cost.grp) }.sumOf { it.amount }
     val parcelas = inst.sumOf { it.inst.amount }
     val parcelasPagas = inst.filter { it.inst.paid }.sumOf { it.inst.amount }
     val pagoFixos = counted.filter { it.status == ForecastStatus.PAGO }.sumOf { it.amount }
@@ -159,13 +163,13 @@ fun FinanceData.cutRefMonth(today: LocalDate = LocalDate.now()): String {
 
 /** O que sairia se você cortasse todos os opcionais ainda não pagos do mês [m]. */
 fun FinanceData.cutOptional(m: String): Cut =
-    Cut(forecasts(m).filter { it.cost.grp == FixedCost.GRP_OPCIONAL && it.counts && it.status == ForecastStatus.PREVISTO }.sortedByDescending { it.amount })
+    Cut(forecasts(m).filter { settings.isOptional(it.cost.grp) && it.counts && it.status == ForecastStatus.PREVISTO }.sortedByDescending { it.amount })
 
 // ---------- evolução: reserva, contas riscadas, marcos ----------
 enum class Level { OK, WARN, BAD }
 
 /** Meses de aporte (do plano) até acumular [gap]; devolve o mês em que fecha, ou null se passar de 10 anos. */
-private fun FinanceData.etaForGap(gap: Double, extraMonthly: Double, today: LocalDate): String? {
+internal fun FinanceData.etaForGap(gap: Double, extraMonthly: Double, today: LocalDate): String? {
     val now = monthKey(today)
     if (gap <= 0) return now
     var cum = 0.0
@@ -199,7 +203,7 @@ fun FinanceData.riscadas(today: LocalDate = LocalDate.now(), extraMonthly: Doubl
     val afterReserve = reserveEta(extraMonthly, today)?.let { addMonths(maxOf(it, now), 1) }
     val start = listOfNotNull(settings.ipcaStart.takeIf { it.isNotBlank() }, afterReserve).maxOrNull() ?: addMonths(now, 1)
     var cum = 0.0
-    return fixed.filter { it.grp == FixedCost.GRP_CASA }.sortedBy { it.amount }.map { f ->
+    return fixed.filter { settings.isHome(it.grp) }.sortedBy { it.amount }.map { f ->
         val target = f.amount * settings.multiplier
         cum += target
         val done = ipca >= cum
@@ -244,7 +248,10 @@ fun FinanceData.whatIf(extraAporte: Double, cutOpcionais: Boolean, raise: Double
 
 // ---------- saúde financeira ----------
 data class HealthItem(val name: String, val value: String, val status: Level)
-data class Health(val items: List<HealthItem>, val score: Int)
+data class Health(val items: List<HealthItem>, val score: Int) {
+    /** Há pelo menos um indicador calculável? Sem dados nenhum, a nota não faz sentido. */
+    val hasData get() = items.any { it.value != "—" }
+}
 
 fun FinanceData.health(today: LocalDate = LocalDate.now()): Health {
     val c = core(); val r = riscadas(today)
@@ -262,11 +269,12 @@ fun FinanceData.health(today: LocalDate = LocalDate.now()): Health {
             if (income > 0) high(aporte / income, .2, .1) else Level.WARN),
         HealthItem("Essenciais sobre a renda", if (income > 0) "${(c.essentials / income * 100).roundToLong()}% da renda" else "—",
             if (income > 0) low(c.essentials / income, .4, .6) else Level.WARN),
-        HealthItem("Contas riscadas", "${r.count { it.done }} de ${r.size}",
+        HealthItem("Contas riscadas", if (r.isEmpty()) "—" else "${r.count { it.done }} de ${r.size}",
             if (r.isNotEmpty() && r.all { it.done }) Level.OK else if (r.any { it.done }) Level.WARN else Level.BAD)
     )
     val pts = mapOf(Level.OK to 100, Level.WARN to 60, Level.BAD to 20)
-    return Health(items, (items.sumOf { pts.getValue(it.status) } / items.size.toDouble()).roundToLong().toInt())
+    val known = items.filter { it.value != "—" }     // indicador sem dado não entra na nota
+    return Health(items, if (known.isEmpty()) 0 else (known.sumOf { pts.getValue(it.status) } / known.size.toDouble()).roundToLong().toInt())
 }
 
 // ---------- o "norte": próximos passos ----------
@@ -347,7 +355,7 @@ fun FinanceData.evalPurchase(p: PurchaseInput, today: LocalDate = LocalDate.now(
     }
     val freeAfter = c.free - total
     val rm = settings.realRate / 12
-    val t = fixed.filter { it.grp == FixedCost.GRP_CASA }.sumOf { it.amount } * settings.multiplier
+    val t = fixed.filter { settings.isHome(it.grp) }.sumOf { it.amount } * settings.multiplier
     var delay: Double? = null
     if (rec > 0) {
         val a = monthsTo(t, c.ipca, settings.aporteLongo, rm); val b = monthsTo(t + rec * settings.multiplier, c.ipca, settings.aporteLongo, rm)

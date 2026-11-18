@@ -23,6 +23,8 @@ interface FinanceDao {
     @Query("SELECT * FROM aportes") fun aportes(): Flow<List<Aporte>>
     @Query("SELECT * FROM reflections ORDER BY timestamp DESC") fun reflections(): Flow<List<Reflection>>
     @Query("SELECT * FROM goals ORDER BY id") fun goals(): Flow<List<Goal>>
+    @Query("SELECT * FROM revenues ORDER BY month") fun revenues(): Flow<List<Revenue>>
+    @Query("SELECT * FROM snapshots ORDER BY month") fun snapshots(): Flow<List<Snapshot>>
 
     @Query("SELECT * FROM month_entries WHERE fixedId = :fixedId AND month = :month LIMIT 1")
     suspend fun entryOf(fixedId: Long, month: String): MonthEntry?
@@ -39,6 +41,8 @@ interface FinanceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(a: Aporte)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(r: Reflection): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(g: Goal): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(r: Revenue)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(s: Snapshot)
 
     @Delete suspend fun delete(a: Account)
     @Delete suspend fun delete(r: Receivable)
@@ -53,6 +57,7 @@ interface FinanceDao {
     @Query("DELETE FROM debts WHERE id = :debtId") suspend fun deleteDebtRow(debtId: Long)
     @Query("DELETE FROM month_entries WHERE fixedId = :fixedId") suspend fun deleteEntriesOf(fixedId: Long)
     @Query("DELETE FROM aportes WHERE month = :month") suspend fun deleteAporte(month: String)
+    @Query("DELETE FROM revenues WHERE month = :month") suspend fun deleteRevenue(month: String)
 
     @Transaction
     suspend fun deleteDebt(debtId: Long) { deleteInstallmentsOf(debtId); deleteDebtRow(debtId) }
@@ -72,10 +77,12 @@ interface FinanceDao {
     @Query("DELETE FROM reflections") suspend fun clearReflections()
     @Query("DELETE FROM goals") suspend fun clearGoals()
     @Query("DELETE FROM settings") suspend fun clearSettings()
+    @Query("DELETE FROM revenues") suspend fun clearRevenues()
+    @Query("DELETE FROM snapshots") suspend fun clearSnapshots()
 
     @Transaction
     suspend fun clearAll() {
         clearAccounts(); clearReceivables(); clearInstallments(); clearDebts(); clearEntries(); clearFixed()
-        clearExpenses(); clearAportes(); clearReflections(); clearGoals(); clearSettings()
+        clearExpenses(); clearAportes(); clearReflections(); clearGoals(); clearSettings(); clearRevenues(); clearSnapshots()
     }
 }

@@ -50,12 +50,13 @@ import java.time.LocalDate
 /** Os assuntos de Ajustes. Cada um abre uma tela só com as opções daquele assunto. */
 enum class SettingsRoute(val title: String, val icon: ImageVector, val tint: Color) {
     HUB("Ajustes", Icons.Outlined.Settings, CyberGreen),
+    DOT("Dot e aparência", Icons.Outlined.Face, CyberTeal),
     PLANO("Meu plano", Icons.Outlined.Tune, CyberGreen),
     CONTAS("Contas e saldos", Icons.Outlined.AccountBalanceWallet, CyberTeal),
     CUSTOS("Custos previstos", Icons.AutoMirrored.Outlined.ReceiptLong, ImpulseAmber),
     CATEGORIAS("Categorias e grupos", Icons.Outlined.Label, PulseViolet),
+    PJ("PJ e MEI", Icons.Outlined.BusinessCenter, ImpulseAmber),
     APORTES("Aportes por mês", Icons.Outlined.Savings, CyberGreen),
-    DOT("Dot e aparência", Icons.Outlined.Face, CyberTeal),
     BACKUP("Dados e backup", Icons.Outlined.Backup, DopamineBlue),
     ATUALIZACAO("Atualização do app", Icons.Outlined.SystemUpdate, SocialOrange)
 }
@@ -70,9 +71,10 @@ fun SettingsScreen(data: FinanceData, vm: FinanceViewModel, prefs: UiPrefs, rout
             SettingsRoute.CONTAS -> AccountsSection(data, vm)
             SettingsRoute.CUSTOS -> CostsSection(data, vm)
             SettingsRoute.CATEGORIAS -> CategoriesSection(data, vm)
+            SettingsRoute.PJ -> PjSection(data, vm)
             SettingsRoute.APORTES -> ContributionsSection(data, vm)
             SettingsRoute.DOT -> DotSection(data, prefs)
-            SettingsRoute.BACKUP -> BackupSection(vm)
+            SettingsRoute.BACKUP -> BackupSection(vm, prefs)
             SettingsRoute.ATUALIZACAO -> UpdateSection()
         }
     }
@@ -98,6 +100,7 @@ private fun Hub(data: FinanceData, prefs: UiPrefs, onRoute: (SettingsRoute) -> U
         SettingsRoute.CONTAS to "${data.accounts.size} ${if (data.accounts.size == 1) "conta" else "contas"} · ${brl0(c.inHand)} em conta",
         SettingsRoute.CUSTOS to "${data.fixed.size} custos · ${brl0(data.fixed.sumOf { it.amount })} por mês",
         SettingsRoute.CATEGORIAS to "${st.categoryList.size} categorias de gasto · 3 grupos",
+        SettingsRoute.PJ to if (st.meiOn) "MEI: limite de ${brl0(st.meiLimit)} por ano" else "acompanhamento do MEI desligado",
         SettingsRoute.APORTES to "padrão ${brl0(st.aporteLongo)} por mês · ${data.aportes.size} ${if (data.aportes.size == 1) "mês ajustado" else "meses ajustados"}",
         SettingsRoute.DOT to "${prefs.dotName} · ${design.name} · tema ${if (prefs.dark) "escuro" else "claro"}",
         SettingsRoute.BACKUP to "exportar, importar ou apagar seus dados",
@@ -105,7 +108,7 @@ private fun Hub(data: FinanceData, prefs: UiPrefs, onRoute: (SettingsRoute) -> U
     )
     val tiles = SettingsRoute.entries.filter { it != SettingsRoute.HUB }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp + LocalBarInset.current)) {
         item {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Brush.verticalGradient(listOf(design.color.copy(alpha = 0.26f), DarkSurface)))
@@ -149,7 +152,7 @@ private fun SectionTile(route: SettingsRoute, summary: String, onClick: () -> Un
 
 @Composable
 private fun Section(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp), content = content)
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp + LocalBarInset.current), content = content)
 }
 
 // =====================================================================================
@@ -236,7 +239,7 @@ private fun CostsSection(data: FinanceData, vm: FinanceViewModel) {
     var dialog by remember { mutableStateOf<Any?>(null) }
     Section {
         item { Text("Estes são os valores PADRÃO de cada mês. Para mudar só um mês, use a aba Gastos.", color = SecondaryText, style = MaterialTheme.typography.bodySmall) }
-        listOf(FixedCost.GRP_CASA, FixedCost.GRP_TRABALHO, FixedCost.GRP_OPCIONAL).forEach { grp ->
+        st.groups.map { it.id }.forEach { grp ->
             item(key = grp) {
                 val items = data.fixed.filter { it.grp == grp }.sortedByDescending { it.amount }
                 BentoCard {
@@ -282,11 +285,12 @@ private fun CategoriesSection(data: FinanceData, vm: FinanceViewModel) {
         }
         item {
             BentoCard {
-                SectionHeader("Nomes dos grupos de custo")
-                Text("Os três grupos mantêm a função (casa e trabalho entram na reserva; opcionais podem ser cortados), mas o nome é seu.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                SectionHeader("Grupos de custo", "+ grupo") { dialog = "newGroup" }
+                Text("Casa e trabalho entram na reserva; opcionais podem ser cortados. Você pode renomear e criar outros grupos (essenciais ou opcionais) para se organizar melhor.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(6.dp))
-                listOf(FixedCost.GRP_CASA, FixedCost.GRP_TRABALHO, FixedCost.GRP_OPCIONAL).forEachIndexed { i, g ->
-                    StatRow(st.groupLabel(g), "renomear", valueColor = CyberGreen, onClick = { dialog = GroupEdit(i, st.groupLabel(g)) })
+                st.groups.forEachIndexed { i, g ->
+                    val tag = if (g.essential) "essencial" else "opcional"
+                    StatRow("${g.name} · $tag", "editar", valueColor = CyberGreen, onClick = { dialog = if (g.custom) CustomGroupEdit(g) else GroupEdit(i, g.name) })
                 }
             }
         }
@@ -297,10 +301,73 @@ private fun CategoriesSection(data: FinanceData, vm: FinanceViewModel) {
             onSave = { n -> clean(n).takeIf { it.isNotEmpty() }?.let { nn -> saveCats(st.categoryList.map { if (it == d.name) nn else it }.distinct()) } },
             onDelete = if (st.categoryList.size > 1) ({ saveCats(st.categoryList - d.name) }) else null) { dialog = null }
         is GroupEdit -> TextDialog("Nome do grupo", "Nome", d.name, onSave = { n -> if (clean(n).isNotEmpty()) saveGroup(d.index, n) }) { dialog = null }
+        "newGroup" -> NewGroupDialog(onCreate = { n, ess ->
+            val id = "G" + (st.groups.filter { it.custom }.mapNotNull { it.id.drop(1).toIntOrNull() }.maxOrNull()?.plus(1) ?: 1)
+            vm.saveSettings(st.copy(customGroups = (st.groups + GroupDef(id, clean(n), ess, custom = true)).encodeCustom()))
+        }) { dialog = null }
+        is CustomGroupEdit -> TextDialog("Nome do grupo", "Nome", d.def.name,
+            onSave = { n -> if (clean(n).isNotEmpty()) vm.saveSettings(st.copy(customGroups = st.groups.map { if (it.id == d.def.id) it.copy(name = clean(n)) else it }.encodeCustom())) },
+            onDelete = if (data.fixed.none { it.grp == d.def.id }) ({ vm.saveSettings(st.copy(customGroups = st.groups.filter { it.id != d.def.id }.encodeCustom())) }) else null) { dialog = null }
     }
 }
 private data class CatEdit(val name: String)
 private data class GroupEdit(val index: Int, val name: String)
+private data class CustomGroupEdit(val def: GroupDef)
+
+// =====================================================================================
+// PJ e MEI
+// =====================================================================================
+@Composable
+private fun PjSection(data: FinanceData, vm: FinanceViewModel) {
+    val st = data.settings
+    val today = remember { LocalDate.now() }
+    val months = remember { (1..12).map { "%04d-%02d".format(today.year, it) } }
+    var dialog by remember { mutableStateOf<String?>(null) }
+    Section {
+        item {
+            BentoCard {
+                SectionHeader("Acompanhar o MEI")
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Avisar sobre o limite e os prazos", color = AppTextWhite, fontWeight = FontWeight.SemiBold)
+                        Text("O Dot projeta o seu faturamento e avisa quando o MEI pode estourar.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = st.meiOn, onCheckedChange = { vm.saveSettings(st.copy(meiOn = it)) }, colors = SwitchDefaults.colors(checkedTrackColor = CyberGreen))
+                }
+                StatRow("Limite anual de faturamento", brl(st.meiLimit), sub = "valor que você controla: confira o vigente, a regra pode mudar", onClick = { dialog = "limit" })
+            }
+        }
+        item {
+            BentoCard {
+                SectionHeader("Faturamento de ${today.year}")
+                Text("Meses sem registro usam a sua renda (${brl0(st.income)}) como estimativa. Toque para registrar o valor real.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(6.dp))
+                months.forEach { m ->
+                    val real = data.revenues.firstOrNull { it.month == m }
+                    StatRow(mLabel(m), brl(data.revenueOf(m)), sub = if (real != null) "registrado" else if (m <= monthKey(today)) "estimado" else "previsto",
+                        valueColor = if (real != null) CyberGreen else AppTextWhite, onClick = { dialog = m })
+                }
+                data.mei(today)?.let { Note("Acumulado no ano: ${brl0(it.ytd)} de ${brl0(it.limit)} (${(it.usedPct * 100).toInt()}%).") }
+            }
+        }
+        item {
+            BentoCard {
+                SectionHeader("Datas que o Dot acompanha")
+                StatRow("DAS mensal", "dia 20", sub = "ele avisa quando o seu custo \"DAS\" ainda não foi confirmado")
+                StatRow("Declaração anual (DASN-SMEI)", "até 31/05", sub = "confira a data oficial no Portal do Empreendedor")
+                Note("São orientações educativas. Para decisões como abrir uma ME, fale com um contador.")
+            }
+        }
+    }
+    when (val d = dialog) {
+        "limit" -> NumberDialog("Limite anual do MEI", "Valor (R$)", st.meiLimit, onSave = { vm.saveSettings(st.copy(meiLimit = it)) }) { dialog = null }
+        null -> {}
+        else -> {
+            val real = data.revenues.firstOrNull { it.month == d }
+            NumberDialog("Faturamento de ${mLabel(d)}", "Valor (R$)", real?.amount ?: data.revenueOf(d), onSave = { vm.saveRevenue(d, it) }) { dialog = null }
+        }
+    }
+}
 
 // =====================================================================================
 // Aportes por mês
@@ -343,6 +410,12 @@ private fun DotSection(data: FinanceData, prefs: UiPrefs) {
     val dot = LocalDot.current
     val design = prefs.design
     var nameDialog by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    fun pin(cls: Class<*>) {
+        val mgr = android.appwidget.AppWidgetManager.getInstance(ctx)
+        if (mgr.isRequestPinAppWidgetSupported) mgr.requestPinAppWidget(android.content.ComponentName(ctx, cls), null, null)
+        else Toast.makeText(ctx, "Seu launcher não aceita adicionar por aqui. Segure na tela inicial, toque em Widgets e procure PersonDot.", Toast.LENGTH_LONG).show()
+    }
     Section {
         item {
             BentoCard {
@@ -383,6 +456,17 @@ private fun DotSection(data: FinanceData, prefs: UiPrefs) {
                 }
             }
         }
+        item {
+            BentoCard {
+                SectionHeader("Widgets na tela inicial")
+                Text("O Dot na tela do celular: livre de verdade, saúde, próximo passo e atalhos para lançar um gasto ou falar com ele.", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SoftButton("Painel (grande)", { pin(com.persondot.widget.DotInfoWidget::class.java) }, Modifier.weight(1f))
+                    SoftButton("Gasto rápido", { pin(com.persondot.widget.DotQuickWidget::class.java) }, Modifier.weight(1f))
+                }
+            }
+        }
     }
     if (nameDialog) TextDialog("Nome do seu Dot", "Nome", prefs.dotName, onSave = { prefs.updateDotName(it); dot.react("Adorei meu nome!", Mood.HAPPY) }) { nameDialog = false }
 }
@@ -391,7 +475,7 @@ private fun DotSection(data: FinanceData, prefs: UiPrefs) {
 // Dados e backup
 // =====================================================================================
 @Composable
-private fun BackupSection(vm: FinanceViewModel) {
+private fun BackupSection(vm: FinanceViewModel, prefs: UiPrefs) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf(false) }
@@ -431,13 +515,7 @@ private fun BackupSection(vm: FinanceViewModel) {
             }
         }
     }
-    if (dialog) AlertDialog(
-        onDismissRequest = { dialog = false }, containerColor = DarkSurface,
-        title = { Text("Apagar tudo?", color = AppTextWhite) },
-        text = { Text("Isso não pode ser desfeito. Só continue se você já exportou um backup.", color = SecondaryText) },
-        confirmButton = { TextButton(onClick = { vm.resetAll(); dialog = false }) { Text("Apagar", color = ImpulseAmber) } },
-        dismissButton = { TextButton(onClick = { dialog = false }) { Text("Cancelar", color = SecondaryText) } }
-    )
+    if (dialog) ConfirmSheet("Apagar tudo?", "Isso não pode ser desfeito. Só continue se você já exportou um backup.", "Apagar", onConfirm = { vm.resetAll(); prefs.resetAll() }) { dialog = false }
 }
 
 // =====================================================================================

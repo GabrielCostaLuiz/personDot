@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">PersonDot</string>
+    <string name="widget_info_desc">O Dot com o seu livre de verdade, o próximo passo e atalhos.</string>
+    <string name="widget_quick_desc">Livre de verdade e botão de gasto rápido.</string>
 </resources>

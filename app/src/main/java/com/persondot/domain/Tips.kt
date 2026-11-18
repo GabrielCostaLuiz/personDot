@@ -3,7 +3,7 @@ package com.persondot.domain
 import java.time.LocalDate
 
 /** Telas em que o Dot aparece com dicas (a barra fina do topo). */
-enum class TipScreen { GASTOS, DECIDIR, FUTURO }
+enum class TipScreen { GASTOS, RELATORIOS, FUTURO }
 
 /** Dicas do Dot por tela, calculadas dos seus dados. A primeira é a mais importante agora. */
 fun FinanceData.tipsFor(screen: TipScreen, today: LocalDate = LocalDate.now()): List<String> {
@@ -19,9 +19,10 @@ fun FinanceData.tipsFor(screen: TipScreen, today: LocalDate = LocalDate.now()): 
             val lastDue = debts.flatMap { it.installments }.filter { !it.paid && it.month != null }.maxOfOrNull { it.month!! }
             if (c.owed > 0 && lastDue != null) add("Suas parcelas somam ${brl0(c.owed)} e a última vence em ${mLabel(lastDue)}. O calendário de alívio mostra quando o mês folga.")
         }
-        TipScreen.DECIDIR -> buildList {
-            add("Antes de comprar, me conte o valor: eu mostro o efeito no seu livre, nos próximos meses e na meta de independência.")
-            add("Bateu um impulso? A Reflexão 24h segura a compra, e se você desistir ela conta como vitória.")
+        TipScreen.RELATORIOS -> buildList {
+            add("A curva do patrimônio mostra a evolução de verdade. Eu guardo uma foto sua todo mês.")
+            add("Toque em um mês do MEI para registrar o faturamento real e deixar o aviso de limite preciso.")
+            add("Compare previsto e pago: quando a diferença some, o mês fechou como planejado.")
             if (c.reserveTarget > 0 && c.free < c.reserveTarget) add("Sua reserva ainda não fechou. Compras grandes agora a adiam.")
         }
         TipScreen.FUTURO -> buildList {

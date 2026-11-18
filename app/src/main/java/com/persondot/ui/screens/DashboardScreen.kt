@@ -39,7 +39,7 @@ private fun greeting(): String {
 @Composable
 fun DashboardScreen(
     data: FinanceData, vm: FinanceViewModel, design: DotDesign, dotName: String,
-    onNavigate: (Dest) -> Unit, modifier: Modifier = Modifier
+    onNavigate: (Dest) -> Unit, onSimulate: () -> Unit, modifier: Modifier = Modifier
 ) {
     val dot = LocalDot.current
     val today = remember { LocalDate.now() }
@@ -50,9 +50,10 @@ fun DashboardScreen(
     val riscadas = remember(data) { data.riscadas() }
     val plan = remember(data) { data.monthPlan(now) }
     val due = remember(data) { data.dueIn(now) }
+    val insights = remember(data) { data.insights(today) }
     var dialog by remember { mutableStateOf<Any?>(null) }
 
-    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp)) {
+    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp + LocalBarInset.current)) {
         // ---- o Dot e o norte principal ----
         item {
             val first = steps.first()
@@ -91,7 +92,7 @@ fun DashboardScreen(
                     Text("Hoje, sem contar o que ainda vai entrar: ${brl(c.freeNow)}", color = SecondaryText, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        ScoreRing(health.score / 100f, "${health.score}", "Saúde", if (health.score >= 75) CyberGreen else if (health.score >= 50) levelColor(Level.WARN) else ImpulseAmber)
+                        ScoreRing(health.score / 100f, if (health.hasData) "${health.score}" else "—", "Saúde", if (health.score >= 75) CyberGreen else if (health.score >= 50) levelColor(Level.WARN) else ImpulseAmber)
                         val rp = if (c.reserveTarget > 0) (c.free / c.reserveTarget).toFloat() else 0f
                         ScoreRing(rp.coerceAtLeast(0f), "${(rp * 100).roundToInt().coerceAtLeast(0)}%", "Reserva", if (rp >= 1f) CyberGreen else CyberTeal)
                         val done = riscadas.count { it.done }
@@ -122,6 +123,31 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            // ---- o guia do Dot ----
+            if (insights.isNotEmpty()) item {
+                BentoCard {
+                    SectionHeader("O Dot recomenda")
+                    insights.take(3).forEachIndexed { i, ins ->
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Dot(ins.level); Spacer(Modifier.width(8.dp))
+                                Text(ins.title, color = AppTextWhite, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            }
+                            Text(ins.detail, color = SecondaryText, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 18.dp, top = 2.dp))
+                            (ins.action as? GuideAction.Apply)?.let { a ->
+                                SoftButton(a.label, { vm.saveSettings(data.settings.applyChanges(a.changes)); dot.react("Apliquei: ${a.label}.", Mood.HAPPY) }, Modifier.padding(start = 18.dp, top = 6.dp))
+                            }
+                            (ins.action as? GuideAction.Go)?.let { g ->
+                                TextButton(onClick = { onNavigate(g.dest) }, modifier = Modifier.padding(start = 10.dp)) { Text("ver", color = CyberGreen, fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                        if (i < minOf(2, insights.lastIndex)) HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
+                    }
+                    if (insights.size > 3) TextButton(onClick = { onNavigate(Dest.DOT) }) { Text("+ ${insights.size - 3} no chat com o Dot", color = CyberGreen) }
+                }
+            }
+            item { SoftButton("Vale a pena comprar algo? Simular", onSimulate, Modifier.fillMaxWidth()) }
 
             // ---- este mês ----
             item {

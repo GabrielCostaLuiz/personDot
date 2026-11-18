@@ -20,6 +20,14 @@ class UiPrefs(private val sp: SharedPreferences) {
     var dotColor by mutableStateOf<Long?>(if (sp.contains("dot_color")) sp.getLong("dot_color", 0L) else null); private set
     var tips by mutableStateOf(sp.getBoolean("dot_tips", true)); private set
 
+    var onboarded by mutableStateOf(sp.getBoolean("onboarded", false)); private set
+    /** Zera o aparelho: o Dot volta ao padrão e o onboarding recomeça. */
+    fun resetAll() {
+        updateDot("original"); updateDotColor(null); updateDotName("Dot")
+        onboarded = false; sp.edit().putBoolean("onboarded", false).apply()
+    }
+    fun markOnboarded() { onboarded = true; sp.edit().putBoolean("onboarded", true).apply() }
+
     val design: DotDesign
         get() = dotById(dotId).let { d -> dotColor?.let { c -> d.copy(color = Color(c.toInt())) } ?: d }
 

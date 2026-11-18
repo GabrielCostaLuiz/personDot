@@ -35,7 +35,7 @@ private data class NewFixed(val group: String)
  * comprometido) e o Fluxo (calendário de alívio e mês a mês).
  */
 @Composable
-fun SpendingScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier = Modifier) {
+fun SpendingScreen(data: FinanceData, vm: FinanceViewModel, onSimulate: () -> Unit, modifier: Modifier = Modifier) {
     var seg by rememberSaveable { mutableIntStateOf(0) }
     Column(modifier.fillMaxSize()) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
@@ -47,7 +47,7 @@ fun SpendingScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier =
             }
         }
         when (seg) {
-            0 -> MonthSegment(data, vm)
+            0 -> MonthSegment(data, vm, onSimulate)
             1 -> InstallmentsSegment(data, vm)
             else -> FlowSegment(data, vm)
         }
@@ -58,7 +58,7 @@ fun SpendingScreen(data: FinanceData, vm: FinanceViewModel, modifier: Modifier =
 // Mês: previsões
 // =====================================================================================
 @Composable
-private fun MonthSegment(data: FinanceData, vm: FinanceViewModel) {
+private fun MonthSegment(data: FinanceData, vm: FinanceViewModel, onSimulate: () -> Unit) {
     val dot = LocalDot.current
     val current = remember { monthKey(LocalDate.now()) }
     val months = remember { listOf(current) + visibleMonths() }
@@ -72,8 +72,9 @@ private fun MonthSegment(data: FinanceData, vm: FinanceViewModel) {
     val monthExpenses = remember(data, month) { data.expenses.filter { it.date.startsWith(month) } }
     val byCat = remember(monthExpenses) { monthExpenses.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.amount } }.toList().sortedByDescending { it.second } }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp + LocalBarInset.current)) {
         item { MonthChips(months, month) { month = it } }
+        item { SoftButton("Vale a pena comprar algo? Simular", onSimulate, Modifier.fillMaxWidth()) }
 
         // resumo do mês, com a soma explicada
         item {
@@ -131,18 +132,21 @@ private fun MonthSegment(data: FinanceData, vm: FinanceViewModel) {
         }
 
         // previsões por tipo
-        listOf(
-            Triple(FixedCost.GRP_CASA, "Casa · essenciais", "Luz, mercado, prédio, internet"),
-            Triple(FixedCost.GRP_TRABALHO, "Trabalho", "DAS, ferramentas, assinaturas de trabalho"),
-            Triple(FixedCost.GRP_OPCIONAL, "Opcionais", "Pode cortar sem problema")
-        ).forEach { (grp, title, hint) ->
+        data.settings.groups.map { g ->
+            Triple(g.id, g.name, when (g.id) {
+                FixedCost.GRP_CASA -> "Luz, mercado, prédio, internet"
+                FixedCost.GRP_TRABALHO -> "DAS, ferramentas, assinaturas de trabalho"
+                FixedCost.GRP_OPCIONAL -> "Pode cortar sem problema"
+                else -> if (g.essential) "Custo essencial: entra na reserva" else "Custo opcional: pode ser cortado"
+            })
+        }.forEach { (grp, title, hint) ->
             item(key = grp) {
                 val items = plan.forecasts.filter { it.cost.grp == grp }.sortedWith(compareBy({ it.status == ForecastStatus.REMOVIDO }, { -it.amount }))
                 val counted = items.filter { it.counts }
                 BentoCard {
                     SectionHeader(data.settings.groupLabel(grp), "+ custo") { dialog = NewFixed(grp) }
                     if (items.isEmpty()) EmptyHint(hint)
-                    items.forEach { f -> ForecastRow(f, cutOn && grp == FixedCost.GRP_OPCIONAL && f.status == ForecastStatus.PREVISTO) { dialog = f } }
+                    items.forEach { f -> ForecastRow(f, cutOn && data.settings.isOptional(grp) && f.status == ForecastStatus.PREVISTO) { dialog = f } }
                     if (counted.isNotEmpty()) {
                         val paid = counted.count { it.status == ForecastStatus.PAGO }
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -256,7 +260,7 @@ private fun InstallmentsSegment(data: FinanceData, vm: FinanceViewModel) {
     var dialog by remember { mutableStateOf<Any?>(null) }
     val c = remember(data) { data.core() }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp + LocalBarInset.current)) {
         item {
             BentoCard {
                 SectionHeader("Total comprometido", "+ dívida") { dialog = "newDebt" }
@@ -302,13 +306,7 @@ private fun InstallmentsSegment(data: FinanceData, vm: FinanceViewModel) {
         is DebtInstallment -> InstallmentDialog(d, { vm.saveInstallment(it) }, { vm.deleteInstallment(d) }) { dialog = null }
         is AddInstTarget -> AddInstallmentDialog({ m, a -> vm.addInstallment(d.debtId, m, a) }) { dialog = null }
         is PayTarget -> PayNextDialog("${d.debt.debt.name} · ${mLabel(d.inst.month)}", d.inst.amount, data.accounts, { acc -> vm.payNext(d.debt.debt.id, acc); dot.react("Parcela paga. Falta menos!", Mood.HAPPY) }) { dialog = null }
-        is DeleteDebt -> AlertDialog(
-            onDismissRequest = { dialog = null }, containerColor = DarkSurface,
-            title = { Text("Excluir \"${d.debt.name}\"?", color = AppTextWhite) },
-            text = { Text("Todas as parcelas dessa dívida serão apagadas. Isso não devolve saldo às contas.", color = SecondaryText) },
-            confirmButton = { TextButton(onClick = { vm.deleteDebt(d.debt.id); dialog = null }) { Text("Excluir", color = ImpulseAmber) } },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancelar", color = SecondaryText) } }
-        )
+        is DeleteDebt -> ConfirmSheet("Excluir \"${d.debt.name}\"?", "Todas as parcelas dessa dívida serão apagadas. Isso não devolve saldo às contas.", "Excluir", onConfirm = { vm.deleteDebt(d.debt.id) }) { dialog = null }
     }
 }
 
@@ -324,7 +322,7 @@ private fun FlowSegment(data: FinanceData, vm: FinanceViewModel) {
     val maxRelief = reliefs.maxOfOrNull { it.second }?.takeIf { it > 0 } ?: 1.0
     val plan = remember(data, month) { data.monthPlan(month) }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp + LocalBarInset.current)) {
         item {
             BentoCard {
                 SectionHeader("Calendário de alívio")

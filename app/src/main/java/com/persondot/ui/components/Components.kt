@@ -126,10 +126,11 @@ fun MonthChips(months: List<String>, selected: String, onSelect: (String) -> Uni
 }
 
 @Composable
-fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = Color.Black), shape = RoundedCornerShape(14.dp)) {
-        Text(text, fontWeight = FontWeight.Bold)
-    }
+fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Button(
+        onClick = onClick, modifier = modifier, enabled = enabled, shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = Color.Black, disabledContainerColor = BorderColor, disabledContentColor = SecondaryText)
+    ) { Text(text, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -162,3 +163,12 @@ fun ScoreRing(progress: Float, center: String, label: String, color: Color, modi
         Text(label, color = SecondaryText, style = MaterialTheme.typography.labelSmall)
     }
 }
+
+
+/** Cores dos campos de texto, no estilo do app (claro e escuro). */
+@Composable
+fun textFieldDarkColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = PulseViolet, unfocusedBorderColor = BorderColor, focusedLabelColor = PulseViolet, unfocusedLabelColor = SecondaryText,
+    focusedTextColor = AppTextWhite, unfocusedTextColor = AppTextWhite,
+    focusedPlaceholderColor = SecondaryText.copy(0.7f), unfocusedPlaceholderColor = SecondaryText.copy(0.5f)
+)

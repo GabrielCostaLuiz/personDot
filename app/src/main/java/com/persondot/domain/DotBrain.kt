@@ -1,6 +1,7 @@
 package com.persondot.domain
 
 import com.persondot.data.model.Account
+import com.persondot.data.model.groupLabel
 import java.time.LocalDate
 
 /**
@@ -8,12 +9,31 @@ import java.time.LocalDate
  * Não usa IA nem internet. Cada resposta existe em dois tamanhos:
  *  - direto: a conclusão em uma ou duas frases (o que já está nas telas fica nas telas);
  *  - detalhado: os números e o porquê.
- * Ações que mudam dados (confirmar pagamento, cancelar custo, lançar gasto) sempre pedem um "sim" antes.
+ * Tudo que MUDA dados (confirmar, cadastrar, excluir, lançar, aplicar sugestão) sempre pede um "sim" antes.
  */
 sealed interface DotAction {
-    data class ConfirmForecast(val fixedId: Long, val month: String, val name: String, val amount: Double) : DotAction
+    data class ConfirmForecast(val fixedId: Long, val month: String, val name: String, val amount: Double, val accountId: Long? = null) : DotAction
     data class CancelFrom(val fixedId: Long, val month: String, val name: String) : DotAction
-    data class AddExpense(val desc: String, val amount: Double, val cat: String) : DotAction
+    data class AddExpense(val desc: String, val amount: Double, val cat: String, val accountId: Long? = null) : DotAction
+    data class AddFixed(val name: String, val amount: Double, val group: String, val onCard: Boolean, val startMonth: String) : DotAction
+    data class SetFixedAmount(val fixedId: Long, val name: String, val amount: Double) : DotAction
+    data class DeleteFixed(val fixedId: Long, val name: String) : DotAction
+    data class RemoveFromMonth(val fixedId: Long, val month: String, val name: String) : DotAction
+    data class DeleteExpense(val expenseId: Long, val label: String) : DotAction
+    data class AddReceivable(val desc: String, val amount: Double) : DotAction
+    data class ReceiveReceivable(val receivableId: Long, val label: String, val accountId: Long? = null) : DotAction
+    data class PayNextInstallment(val debtId: Long, val name: String, val amount: Double, val accountId: Long? = null) : DotAction
+    data class AddRevenue(val month: String, val amount: Double) : DotAction
+    data class StartReflection(val name: String, val price: Double, val emotion: String, val cash: Boolean) : DotAction
+    data class DecideReflection(val id: Int, val name: String, val buy: Boolean) : DotAction
+    data class AddAccount(val name: String, val balance: Double, val kind: String) : DotAction
+    data class SetBalance(val accountId: Long, val name: String, val balance: Double) : DotAction
+    data class DeleteAccount(val accountId: Long, val name: String) : DotAction
+    data class DeleteReceivable(val receivableId: Long, val label: String) : DotAction
+    data class SetAporte(val month: String, val amount: Double) : DotAction
+    data class AddCategory(val name: String) : DotAction
+    data class RemoveCategory(val name: String) : DotAction
+    data class ApplyChanges(val changes: Map<String, Double>, val label: String) : DotAction
 }
 
 data class BrainReply(
@@ -27,28 +47,21 @@ data class BrainReply(
 
 object DotBrain {
 
-    fun greeting() = BrainReply("Oi! Monte a sua pergunta aqui embaixo, escolhendo os blocos. Eu respondo com os seus números.")
+    fun greeting() = BrainReply("Oi! Escolha os blocos aqui embaixo para perguntar ou pedir algo. Eu respondo com os seus números e, se for para mudar alguma coisa, peço um sim antes.")
 
     private fun bullets(items: List<String>) = items.joinToString("\n") { "• $it" }
     private fun s(n: Int, one: String, many: String) = if (n == 1) one else many
     private fun FinanceData.liquidAccount() = accounts.firstOrNull { it.kind != Account.KIND_IPCA }
     private fun lvl(score: Int) = if (score >= 75) Level.OK else if (score >= 50) Level.WARN else Level.BAD
+    private fun levelOf(l: Level) = l
 
     fun answer(d: Draft, data: FinanceData, detailed: Boolean = false, today: LocalDate = LocalDate.now()): BrainReply {
         val now = monthKey(today)
         val next = addMonths(now, 1)
+        val acc = if (d.accountChosen) data.accounts.firstOrNull { it.id == d.accountId } else data.liquidAccount()
+        val from = acc?.let { " Eu mexo na conta ${it.name}." } ?: ""
         return when (d.topic) {
             null -> BrainReply("Escolha um tema para começar.")
-
-            Topic.SAUDE -> {
-                val h = data.health(today)
-                val weak = h.items.minByOrNull { mapOf(Level.BAD to 0, Level.WARN to 1, Level.OK to 2).getValue(it.status) }
-                BrainReply(
-                    if (detailed) "Sua saúde financeira está em ${h.score}/100:\n" + bullets(h.items.map { "${it.name}: ${it.value}" })
-                    else "Sua saúde financeira está em ${h.score}/100. O ponto mais fraco é ${weak?.name?.lowercase()} (${weak?.value}).",
-                    tool = "saude_financeira", level = lvl(h.score), hasMore = !detailed
-                )
-            }
 
             Topic.NORTE -> {
                 val steps = data.norte(today)
@@ -59,12 +72,19 @@ object DotBrain {
                 )
             }
 
-            Topic.LIVRE -> {
-                val c = data.core(); val p = data.monthPlan(next)
-                BrainReply(
-                    if (detailed) "Seu livre de verdade é ${brl(c.free)} (em conta ${brl0(c.inHand)} + a receber ${brl0(c.toReceive)} − parcelas ${brl0(c.owed)}).\nEm ${mLabel(next)}, depois das previsões e do aporte, sobram ${brl(p.restante)} para lazer."
-                    else "Seu livre de verdade é ${brl(c.free)}. Em ${mLabel(next)} sobram ${brl(p.restante)} para lazer.",
-                    tool = "livre_de_verdade", level = if (c.free < 0) Level.BAD else Level.OK, hasMore = !detailed
+            // ---------- o guia ----------
+            Topic.GUIA -> {
+                val list = data.insights(today)
+                if (list.isEmpty()) return BrainReply("Por enquanto não tenho nada a recomendar: está tudo em ordem.", tool = "guia", level = Level.OK)
+                val top = list.first()
+                val act = (top.action as? GuideAction.Apply)
+                if (detailed) BrainReply(
+                    "O que eu vejo na sua situação:\n" + bullets(list.take(7).map { "${it.title}: ${it.detail}" }),
+                    tool = "guia", level = top.level
+                ) else BrainReply(
+                    "${top.title}. ${top.detail}" + (act?.let { "\n\nQuer que eu aplique (${it.label})?" } ?: ""),
+                    tool = "guia", level = top.level, hasMore = list.size > 1,
+                    pending = act?.let { DotAction.ApplyChanges(it.changes, it.label) }
                 )
             }
 
@@ -96,6 +116,24 @@ object DotBrain {
             }
 
             Topic.COMO_ESTA -> when (d.sub) {
+                "saude" -> {
+                    val h = data.health(today)
+                    if (!h.hasData) return BrainReply("Ainda não tenho dados para medir a sua saúde financeira. Cadastre a renda, as contas e os custos e eu calculo.", tool = "saude_financeira", level = Level.WARN)
+                    val weak = h.items.minByOrNull { mapOf(Level.BAD to 0, Level.WARN to 1, Level.OK to 2).getValue(it.status) }
+                    BrainReply(
+                        if (detailed) "Sua saúde financeira está em ${h.score}/100:\n" + bullets(h.items.map { "${it.name}: ${it.value}" })
+                        else "Sua saúde financeira está em ${h.score}/100. O ponto mais fraco é ${weak?.name?.lowercase()} (${weak?.value}).",
+                        tool = "saude_financeira", level = lvl(h.score), hasMore = !detailed
+                    )
+                }
+                "livre" -> {
+                    val c = data.core(); val p = data.monthPlan(next)
+                    BrainReply(
+                        if (detailed) "Seu livre de verdade é ${brl(c.free)} (em conta ${brl0(c.inHand)} + a receber ${brl0(c.toReceive)} − parcelas ${brl0(c.owed)}).\nEm ${mLabel(next)}, depois das previsões e do aporte, sobram ${brl(p.restante)} para lazer."
+                        else "Seu livre de verdade é ${brl(c.free)}. Em ${mLabel(next)} sobram ${brl(p.restante)} para lazer.",
+                        tool = "livre_de_verdade", level = if (c.free < 0) Level.BAD else Level.OK, hasMore = !detailed
+                    )
+                }
                 "mes" -> {
                     val m = d.month ?: now
                     val p = data.monthPlan(m)
@@ -133,6 +171,21 @@ object DotBrain {
                         tool = "reserva", level = Level.WARN, hasMore = !detailed
                     )
                 }
+                "mei" -> {
+                    val m = data.mei(today) ?: return BrainReply("O acompanhamento do MEI está desligado. Ative em Ajustes → PJ e MEI.", tool = "mei")
+                    val over = m.projectedYear - m.limit
+                    BrainReply(
+                        if (detailed) "Faturamento do MEI em ${today.year}:\n" + bullets(listOf(
+                            "Até agora: ${brl0(m.ytd)} de ${brl0(m.limit)} (${(m.usedPct * 100).toInt()}%)",
+                            "Média mensal: ${brl0(m.avgMonthly)}",
+                            "Fecho do ano no ritmo atual: ${brl0(m.projectedYear)}",
+                            if (over > 0) "Passa do limite em ${mLabel(m.crossMonth)} (${brl0(over)} acima)" else "Dentro do limite, com folga de ${brl0(-over)}") +
+                            (if (m.estimatedMonths > 0) listOf("${m.estimatedMonths} meses estimados pela renda; registre o real") else emptyList()))
+                        else if (over > 0) "Você passa do limite do MEI em ${mLabel(m.crossMonth)} no ritmo atual (${brl0(over)} acima). Planeje a ME."
+                        else "Faturou ${brl0(m.ytd)} de ${brl0(m.limit)} (${(m.usedPct * 100).toInt()}%). No ritmo atual fecha o ano com folga de ${brl0(-over)}.",
+                        tool = "mei", level = if (over > 0) Level.WARN else Level.OK, hasMore = !detailed
+                    )
+                }
                 else -> {
                     val r = data.riscadas(today); val c = data.core()
                     val nextBill = r.firstOrNull { !it.done }
@@ -167,25 +220,95 @@ object DotBrain {
                 )
             }
 
-            Topic.REGISTRAR -> {
-                val acc = data.liquidAccount()
-                val from = acc?.let { " Eu desconto da conta ${it.name}." } ?: ""
-                when (d.sub) {
-                    "pagou" -> {
-                        val f = data.forecasts(now).firstOrNull { it.cost.id == d.costId } ?: return BrainReply("Não achei essa conta neste mês.")
-                        if (f.status == ForecastStatus.PAGO) return BrainReply("${f.cost.name} de ${mLabel(now)} já está confirmado como pago.")
-                        BrainReply("Confirmo ${f.cost.name} de ${mLabel(now)} por ${brl(f.amount)}?$from", tool = "confirmar_pagamento", pending = DotAction.ConfirmForecast(f.cost.id, now, f.cost.name, f.amount))
-                    }
-                    "cancelou" -> {
-                        val cost = data.fixed.firstOrNull { it.id == d.costId } ?: return BrainReply("Não achei esse custo.")
-                        BrainReply(
-                            "Cancelo ${cost.name} a partir de ${mLabel(next)}? Isso economiza ${brl(cost.amount)} por mês (${brl0(cost.amount * 12)} por ano). Meses anteriores ficam como estão.",
-                            tool = "cancelar_custo", pending = DotAction.CancelFrom(cost.id, next, cost.name)
-                        )
-                    }
-                    else -> BrainReply(
-                        "Lanço ${brl(d.amount ?: 0.0)} em ${d.category}?$from",
-                        tool = "lançar_gasto", pending = DotAction.AddExpense(d.category ?: "Gasto", d.amount ?: 0.0, d.category ?: "Outros")
+            // ---------- registrar ----------
+            Topic.REGISTRAR -> when (d.sub) {
+                "pagou" -> {
+                    val f = data.forecasts(now).firstOrNull { it.cost.id == d.costId } ?: return BrainReply("Não achei essa conta neste mês.")
+                    if (f.status == ForecastStatus.PAGO) return BrainReply("${f.cost.name} de ${mLabel(now)} já está confirmado como pago.")
+                    BrainReply("Confirmo ${f.cost.name} de ${mLabel(now)} por ${brl(f.amount)}?$from", tool = "confirmar_pagamento", pending = DotAction.ConfirmForecast(f.cost.id, now, f.cost.name, f.amount, acc?.id))
+                }
+                "pagouparcela" -> {
+                    val debt = data.debts.firstOrNull { it.debt.id == d.debtId } ?: return BrainReply("Não achei essa dívida.")
+                    val ni = debt.installments.filter { !it.paid }.minByOrNull { it.month ?: "9999" } ?: return BrainReply("Essa dívida não tem parcelas em aberto.")
+                    BrainReply("Confirmo a parcela de ${debt.debt.name} (${mLabel(ni.month)}, ${brl(ni.amount)})?$from", tool = "pagar_parcela", pending = DotAction.PayNextInstallment(debt.debt.id, debt.debt.name, ni.amount, acc?.id))
+                }
+                "cancelou" -> {
+                    val cost = data.fixed.firstOrNull { it.id == d.costId } ?: return BrainReply("Não achei esse custo.")
+                    BrainReply(
+                        "Cancelo ${cost.name} a partir de ${mLabel(next)}? Isso economiza ${brl(cost.amount)} por mês (${brl0(cost.amount * 12)} por ano). Meses anteriores ficam como estão.",
+                        tool = "cancelar_custo", pending = DotAction.CancelFrom(cost.id, next, cost.name)
+                    )
+                }
+                "recebi" -> {
+                    val cur = data.revenues.firstOrNull { it.month == now }?.amount
+                    BrainReply(
+                        "Somo ${brl(d.amount ?: 0.0)} ao faturamento de ${mLabel(now)}?" + (cur?.let { " Hoje está registrado ${brl(it)}." } ?: " Ainda não há registro neste mês (eu estimava pela sua renda)."),
+                        tool = "registrar_faturamento", pending = DotAction.AddRevenue(now, d.amount ?: 0.0)
+                    )
+                }
+                else -> BrainReply(
+                    "Lanço ${brl(d.amount ?: 0.0)} em ${d.category}?$from",
+                    tool = "lançar_gasto", pending = DotAction.AddExpense(d.category ?: "Gasto", d.amount ?: 0.0, d.category ?: "Outros", acc?.id)
+                )
+            }
+
+            // ---------- cadastrar ----------
+            Topic.CADASTRAR -> when (d.sub) {
+                "custo" -> BrainReply(
+                    "Cadastro “${d.name}” de ${brl(d.amount ?: 0.0)} por mês em ${data.settings.groupLabel(d.group ?: "OPCIONAL")}, ${if (d.onCard) "no cartão" else "fora do cartão"}, valendo a partir de ${mLabel(now)}?",
+                    tool = "cadastrar_custo", pending = DotAction.AddFixed(d.name ?: "Custo", d.amount ?: 0.0, d.group ?: "OPCIONAL", d.onCard, now)
+                )
+                "conta" -> BrainReply("Cadastro a conta “${d.name}” com saldo de ${brl(d.amount ?: 0.0)} (${if (d.kind == "IPCA") "balde do IPCA+" else "dinheiro e reserva"})?", tool = "cadastrar_conta", pending = DotAction.AddAccount(d.name ?: "Conta", d.amount ?: 0.0, d.kind ?: "RESERVA"))
+                "categoria" -> BrainReply("Adiciono a categoria “${d.name}” aos gastos do dia a dia?", tool = "cadastrar_categoria", pending = DotAction.AddCategory(d.name ?: "Outros"))
+                "aporte" -> BrainReply("Defino o aporte de ${mLabel(d.month)} em ${brl(d.amount ?: 0.0)}? Os outros meses continuam no padrão.", tool = "definir_aporte", pending = DotAction.SetAporte(d.month ?: now, d.amount ?: 0.0))
+                else -> BrainReply("Cadastro “${d.name}” de ${brl(d.amount ?: 0.0)} como algo a receber?", tool = "cadastrar_entrada", pending = DotAction.AddReceivable(d.name ?: "Entrada", d.amount ?: 0.0))
+            }
+
+            // ---------- mudar ou excluir ----------
+            Topic.MUDAR -> when (d.sub) {
+                "ajustar" -> {
+                    val cost = data.fixed.firstOrNull { it.id == d.costId } ?: return BrainReply("Não achei esse custo.")
+                    BrainReply("Mudo o valor padrão de ${cost.name} de ${brl(cost.amount)} para ${brl(d.amount ?: 0.0)}? Vale para os meses ainda em aberto.", tool = "ajustar_custo", pending = DotAction.SetFixedAmount(cost.id, cost.name, d.amount ?: 0.0))
+                }
+                "tirarmes" -> {
+                    val cost = data.fixed.firstOrNull { it.id == d.costId } ?: return BrainReply("Não achei esse custo.")
+                    BrainReply("Tiro ${cost.name} só de ${mLabel(now)}? Nos outros meses ele continua.", tool = "tirar_do_mes", pending = DotAction.RemoveFromMonth(cost.id, now, cost.name))
+                }
+                "excluir" -> {
+                    val cost = data.fixed.firstOrNull { it.id == d.costId } ?: return BrainReply("Não achei esse custo.")
+                    BrainReply("Excluo ${cost.name} de vez? Isso apaga o custo e os ajustes dele em todos os meses.", tool = "excluir_custo", pending = DotAction.DeleteFixed(cost.id, cost.name))
+                }
+                "apagargasto" -> BrainReply("Apago o gasto ${d.pickedLabel}? O saldo da conta não é devolvido.", tool = "apagar_gasto", pending = DotAction.DeleteExpense(d.expenseId ?: 0, d.pickedLabel ?: ""))
+                "excluirentrada" -> BrainReply("Excluo a entrada ${d.pickedLabel}?", tool = "excluir_entrada", pending = DotAction.DeleteReceivable(d.receivableId ?: 0, d.pickedLabel ?: ""))
+                "saldo" -> {
+                    val a = data.accounts.firstOrNull { it.id == d.accountId } ?: return BrainReply("Não achei essa conta.")
+                    BrainReply("Mudo o saldo de ${a.name} de ${brl(a.balance)} para ${brl(d.amount ?: 0.0)}?", tool = "ajustar_saldo", pending = DotAction.SetBalance(a.id, a.name, d.amount ?: 0.0))
+                }
+                "excluirconta" -> {
+                    val a = data.accounts.firstOrNull { it.id == d.accountId } ?: return BrainReply("Não achei essa conta.")
+                    BrainReply("Excluo a conta ${a.name}? O saldo dela (${brl(a.balance)}) deixa de contar no app.", tool = "excluir_conta", pending = DotAction.DeleteAccount(a.id, a.name))
+                }
+                "removercat" -> BrainReply("Removo a categoria ${d.category}? Gastos já lançados nela continuam.", tool = "remover_categoria", pending = DotAction.RemoveCategory(d.category ?: ""))
+                "p_income" -> BrainReply("Mudo a renda mensal de ${brl(data.settings.income)} para ${brl(d.amount ?: 0.0)}?", tool = "ajustar_plano", pending = DotAction.ApplyChanges(mapOf("income" to (d.amount ?: 0.0)), "renda de ${brl(d.amount ?: 0.0)}"))
+                "p_aporte" -> BrainReply("Mudo o aporte mensal padrão de ${brl(data.settings.aporteLongo)} para ${brl(d.amount ?: 0.0)}?", tool = "ajustar_plano", pending = DotAction.ApplyChanges(mapOf("aporteLongo" to (d.amount ?: 0.0)), "aporte padrão de ${brl(d.amount ?: 0.0)}"))
+                "p_reserve" -> BrainReply("Mudo a reserva de ${data.settings.reserveMonths} para ${(d.amount ?: 0.0).toInt()} meses de essenciais?", tool = "ajustar_plano", pending = DotAction.ApplyChanges(mapOf("reserveMonths" to (d.amount ?: 6.0)), "reserva de ${(d.amount ?: 0.0).toInt()} meses"))
+                else -> BrainReply("Marco ${d.pickedLabel} como recebida?$from", tool = "receber_entrada", pending = DotAction.ReceiveReceivable(d.receivableId ?: 0, d.pickedLabel ?: "", acc?.id))
+            }
+
+            // ---------- reflexão 24h ----------
+            Topic.REFLEXAO -> when (d.sub) {
+                "nova" -> BrainReply(
+                    "Seguro “${d.name}” (${brl(d.amount ?: 0.0)}) por 24 horas? Depois eu pergunto se você ainda quer, e se desistir conta como vitória.",
+                    tool = "reflexao_24h", pending = DotAction.StartReflection(d.name ?: "Compra", d.amount ?: 0.0, d.emotion ?: "", !d.onCard)
+                )
+                else -> {
+                    val r = data.reflections.firstOrNull { it.id == d.refId } ?: return BrainReply("Não achei essa reflexão.")
+                    val h = hoursLeft(r.timestamp, r.timerDurationHours)
+                    val buy = d.decision == "comprar"
+                    BrainReply(
+                        if (buy) (if (h > 0) "Ainda faltam ${h}h do tempo de espera. " else "") + "Confirmo que você vai comprar ${r.name} (${brl(r.estimatedPrice)})?"
+                        else "Confirmo que você desistiu de ${r.name}? Você economiza ${brl(r.estimatedPrice)} e ganha uma vitória.",
+                        tool = "reflexao_24h", pending = DotAction.DecideReflection(r.id, r.name, buy)
                     )
                 }
             }
@@ -198,6 +321,25 @@ object DotBrain {
             is DotAction.ConfirmForecast -> "Pronto! Confirmei ${pending.name} de ${mLabel(pending.month)} por ${brl(pending.amount)}."
             is DotAction.CancelFrom -> "Feito. ${pending.name} não aparece mais de ${mLabel(pending.month)} em diante."
             is DotAction.AddExpense -> "Lançado: ${brl(pending.amount)} em ${pending.cat}."
+            is DotAction.AddFixed -> "Cadastrado: ${pending.name}, ${brl(pending.amount)} por mês."
+            is DotAction.SetFixedAmount -> "${pending.name} agora é ${brl(pending.amount)} por mês."
+            is DotAction.DeleteFixed -> "${pending.name} foi excluído."
+            is DotAction.RemoveFromMonth -> "${pending.name} saiu de ${mLabel(pending.month)}."
+            is DotAction.DeleteExpense -> "Gasto apagado."
+            is DotAction.AddReceivable -> "Anotado: ${pending.desc} a receber."
+            is DotAction.ReceiveReceivable -> "Entrada marcada como recebida."
+            is DotAction.PayNextInstallment -> "Parcela de ${pending.name} paga."
+            is DotAction.AddRevenue -> "Faturamento de ${mLabel(pending.month)} atualizado."
+            is DotAction.StartReflection -> "Segurando “${pending.name}” por 24h. Eu aviso quando o tempo passar."
+            is DotAction.DecideReflection -> if (pending.buy) "Registrei a compra de ${pending.name}." else "Que vitória! Você desistiu de ${pending.name}."
+            is DotAction.AddAccount -> "Conta ${pending.name} cadastrada."
+            is DotAction.SetBalance -> "${pending.name} agora está com ${brl(pending.balance)}."
+            is DotAction.DeleteAccount -> "A conta ${pending.name} foi excluída."
+            is DotAction.DeleteReceivable -> "Entrada excluída."
+            is DotAction.SetAporte -> "Aporte de ${mLabel(pending.month)}: ${brl(pending.amount)}."
+            is DotAction.AddCategory -> "Categoria ${pending.name} adicionada."
+            is DotAction.RemoveCategory -> "Categoria ${pending.name} removida."
+            is DotAction.ApplyChanges -> "Aplicado: ${pending.label}."
         },
         tool = "executar_ação", run = pending, level = Level.OK
     )

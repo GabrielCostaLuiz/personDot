@@ -2,27 +2,23 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- sombra de apoio -->
-    <path android:fillColor="#33000000" android:pathData="M54,90 m-20,0 a20,4.2 0 1,1 40,0 a20,4.2 0 1,1 -40,0" />
-    <!-- o Dot: esfera verde com luz no canto superior esquerdo -->
-    <path android:pathData="M54,52 m-31,0 a31,31 0 1,1 62,0 a31,31 0 1,1 -62,0">
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="1.15" android:scaleY="1.15">
+    <!-- o Dot: nuvem roxa com luz no canto superior esquerdo -->
+    <path android:pathData="M42,46.8 H66 A18,18 0 0 1 84,64.8 V66 A18,18 0 0 1 66,84 H42 A18,18 0 0 1 24,66 V64.8 A18,18 0 0 1 42,46.8 Z M27.6,48.6 a13.8,13.8 0 1,1 27.6,0 a13.8,13.8 0 1,1 -27.6,0 Z M39.6,40.8 a15.6,16.8 0 1,1 31.2,0 a15.6,16.8 0 1,1 -31.2,0 Z M58.8,48 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0 Z">
         <aapt:attr name="android:fillColor">
-            <gradient android:type="radial" android:centerX="42" android:centerY="36" android:gradientRadius="58">
-                <item android:offset="0" android:color="#FF6EE7B7" />
-                <item android:offset="0.45" android:color="#FF10B981" />
-                <item android:offset="1" android:color="#FF065F46" />
+            <gradient android:type="radial" android:centerX="40" android:centerY="34" android:gradientRadius="56">
+                <item android:offset="0" android:color="#FFC4B5FD" />
+                <item android:offset="0.5" android:color="#FF8B5CF6" />
+                <item android:offset="1" android:color="#FF6D4FC9" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- brilho -->
-    <group android:pivotX="38" android:pivotY="30" android:rotation="-30">
-        <path android:fillColor="#59FFFFFF" android:pathData="M38,30 m-8,0 a8,3.6 0 1,1 16,0 a8,3.6 0 1,1 -16,0" />
+    <!-- olhos em pílula -->
+    <group android:pivotX="47" android:pivotY="60" android:rotation="-8">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M44,54 A3,3 0 0 1 50,54 L50,66 A3,3 0 0 1 44,66 Z" />
     </group>
-    <!-- olhos em pílula, simétricos -->
-    <group android:pivotX="45" android:pivotY="52" android:rotation="-8">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M41,45 A4,4 0 0 1 49,45 L49,59 A4,4 0 0 1 41,59 Z" />
+    <group android:pivotX="62" android:pivotY="60" android:rotation="8">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M59,54 A3,3 0 0 1 65,54 L65,66 A3,3 0 0 1 59,66 Z" />
     </group>
-    <group android:pivotX="63" android:pivotY="52" android:rotation="8">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M59,45 A4,4 0 0 1 67,45 L67,59 A4,4 0 0 1 59,59 Z" />
     </group>
 </vector>
